@@ -150,11 +150,25 @@ async function main() {
   await server.connect(transport);
   console.error("[nvstudio-mcp] MCP Server aktif melalui StdioServerTransport.");
 
-  // Tangani penutupan koneksi (misal IDE ditutup) agar server ikut mati
-  process.stdin.on('close', () => {
-    console.error("[nvstudio-mcp] Koneksi stdin ditutup oleh IDE. Mematikan server...");
+  const shutdown = () => {
+    console.error("[nvstudio-mcp] Koneksi ditutup oleh IDE. Mematikan server...");
     process.exit(0);
-  });
+  };
+
+  // Tangani penutupan koneksi
+  process.stdin.on('close', shutdown);
+  process.stdin.on('end', shutdown);
+
+  // Fallback: Cek apakah parent process (IDE) masih hidup secara berkala
+  setInterval(() => {
+    try {
+      // process.kill dengan signal 0 hanya mengecek keberadaan proses tanpa membunuhnya
+      process.kill(process.ppid, 0);
+    } catch (e) {
+      console.error("[nvstudio-mcp] Parent process (IDE) sudah mati. Mematikan server untuk menghindari zombie connection...");
+      process.exit(0);
+    }
+  }, 3000);
 }
 
 main().catch((err) => {

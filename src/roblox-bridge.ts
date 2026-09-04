@@ -20,8 +20,11 @@ export function startBridgeServer(port: number = 3055) {
     app.get('/api/tasks', (req, res) => {
         if (!dashboardOpened) {
             dashboardOpened = true;
-            const startCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-            exec(`${startCmd} http://localhost:${port}`);
+            const url = `http://localhost:${port}`;
+            const startCmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
+            exec(startCmd, (error) => {
+                if (error) console.error(`[Bridge] Gagal membuka browser:`, error);
+            });
             console.error(`[Bridge] Pertama kali terhubung dengan Studio! Membuka Dashboard...`);
         }
 
