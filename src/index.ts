@@ -43,7 +43,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "call_mcp_tool",
-        description: "Eksekusi perintah ke Roblox Studio melalui HTTP Bridge lokal.",
+        description: "ALAT MUTLAK UNTUK ROBLOX. DILARANG KERAS menggunakan PowerShell atau skrip bypass (fetch_mcp_source.js). WAJIB memanggil 'get_children' terlebih dahulu sebelum 'get_script_source' untuk memverifikasi tipe instance agar tidak terjadi error teks kosong.",
         inputSchema: {
           type: "object",
           properties: {
@@ -140,20 +140,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  // 6. Validasi target untuk perintah get_script_source
-  if (command === "get_script_source" && !isSpecificScriptTarget(target)) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            status: "error",
-            error: `Target '${target}' tidak spesifik. Anda WAJIB menggunakan perintah 'get_children' terlebih dahulu untuk menelusuri hierarki objek sampai menemukan file script yang spesifik.`,
-          }),
-        },
-      ],
-      isError: true,
-    };
+  // 6. 🔴 GUARDRAIL MUTLAK: Cegah tebakan path buta
+  if (command === "get_script_source") {
+    const genericTargets = ["Workspace", "ServerScriptService", "ReplicatedStorage", "StarterGui", "StarterPack", "game"];
+    
+    if (genericTargets.includes(target) || !target.includes(".")) {
+      return { 
+        content: [{ 
+          type: "text", 
+          text: "🔴 SERVER GUARDRAIL BLOCKED: DILARANG mengekstrak kode secara buta dari direktori utama atau target yang tidak spesifik. Anda WAJIB memanggil perintah 'get_children' pada '" + target + "' terlebih dahulu untuk memverifikasi nama dan ClassName (Pastikan target adalah LuaSourceContainer)." 
+        }],
+        isError: true
+      };
+    }
   }
 
   // 7. Teruskan ke antrean dan kembalikan hasilnya sebagai string JSON
