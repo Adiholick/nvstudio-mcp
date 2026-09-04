@@ -47,3 +47,5 @@ Parser plugin wajib mendukung 3 perintah dasar ini:
 1. `get_children`: Mengembalikan array string nama dan ClassName dari children target.
 2. `get_script_source`: Mengembalikan teks murni properti Source (hanya berlaku untuk LuaSourceContainer).
 3. `update_script_source`: Menimpa properti Source pada target dengan string dari parameter data.
+4. `search_instance`: Mencari path absolut dari sebuah objek berdasarkan namanya secara semantik di direktori pencarian. Target `game`. Data `string` (nama instance).
+5. `create_instance`: Membuat instance baru secara native melalui script json config. Target path (misal `"Workspace"`). Data format JSON `{ "ClassName": "Part", "Properties": { "Name": "Part" } }`.

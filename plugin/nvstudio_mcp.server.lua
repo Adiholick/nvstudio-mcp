@@ -57,6 +57,54 @@ local function processTask(taskData)
             return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
         end
         
+    elseif command == "search_instance" then
+        -- Fitur Semantic Search (Mencari berdasar nama)
+        local searchName = tostring(data)
+        local results = {}
+        
+        -- Membatasi pencarian hanya pada direktori penting untuk menghindari lag
+        local searchableServices = {game:GetService("Workspace"), game:GetService("ReplicatedStorage"), game:GetService("ServerScriptService"), game:GetService("StarterGui")}
+        
+        for _, service in ipairs(searchableServices) do
+            for _, desc in ipairs(service:GetDescendants()) do
+                if desc.Name == searchName then
+                    table.insert(results, desc:GetFullName())
+                end
+            end
+        end
+        
+        if #results > 0 then
+            return { status = "success", result = results }
+        else
+            return { status = "success", result = "Tidak ditemukan instance dengan nama: " .. searchName }
+        end
+
+    elseif command == "create_instance" then
+        -- Fitur Native Builder (Membuat instance dari JSON)
+        local success, config = pcall(function() return HttpService:JSONDecode(data) end)
+        if not success or not config.ClassName then
+            return { status = "error", error = "Format data JSON tidak valid atau ClassName hilang." }
+        end
+        
+        local newSuccess, newInst = pcall(function()
+            local inst = Instance.new(config.ClassName)
+            inst.Parent = targetInstance
+            
+            -- Set properti tambahan jika ada
+            if config.Properties then
+                for prop, val in pairs(config.Properties) do
+                    pcall(function() inst[prop] = val end)
+                end
+            end
+            return inst
+        end)
+        
+        if newSuccess then
+            return { status = "success", result = "Instance '"..config.ClassName.."' berhasil dibuat di " .. target }
+        else
+            return { status = "error", error = "Gagal membuat Instance. Pastikan ClassName valid." }
+        end
+
     else
         return { status = "error", error = "Perintah tidak dikenali oleh Plugin: " .. tostring(command) }
     end
