@@ -84,8 +84,8 @@ if (Test-Path $CursorDir) {
         }
         $IndexPath = (Join-Path $InstallDir "dist\index.js").Replace("\", "/")
         $Config["mcpServers"]["nvstudio-mcp"] = @{
-            command = "node"
-            args = @($IndexPath)
+            "command" = "node";
+            "args" = @($IndexPath)
         }
         $Config | ConvertTo-Json -Depth 10 | Set-Content $CursorMcp -Encoding UTF8
         Write-Host "✅ Berhasil menginjeksi konfigurasi ke .cursor/mcp.json" -ForegroundColor Green

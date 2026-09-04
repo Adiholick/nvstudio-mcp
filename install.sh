@@ -67,15 +67,16 @@ fi
 # 5. Hybrid AI Installer
 echo "🤖 Menyiapkan AI Agent Plugin (Hybrid Method)..."
 ANTIGRAVITY_PLUGIN_DIR="$HOME/.gemini/config/plugins/nvstudio-mcp"
+ANTIGRAVITY_BASE="$HOME/.gemini/config/plugins"
 
 # A. Instalasi Bundle ke Antigravity
-if [ -d "$HOME/.gemini/config/plugins" ]; then
-    echo "   -> Terdeteksi Antigravity IDE. Memasang AI Agent Plugin Bundle..."
+if [ -d "$ANTIGRAVITY_BASE" ]; then
+    echo -e "   -> ${GREEN}Terdeteksi Antigravity IDE. Memasang AI Agent Plugin Bundle...${NC}"
     mkdir -p "$ANTIGRAVITY_PLUGIN_DIR"
     cp -R agent-plugin/* "$ANTIGRAVITY_PLUGIN_DIR/"
-    echo "✅ Bundle terpasang di $ANTIGRAVITY_PLUGIN_DIR"
+    echo -e "${GREEN}✅ Bundle terpasang di $ANTIGRAVITY_PLUGIN_DIR${NC}"
 else
-    echo "   -> Antigravity IDE tidak terdeteksi. Melewati instalasi bundle."
+    echo -e "   -> ${GRAY}Antigravity IDE tidak terdeteksi. Melewati instalasi bundle.${NC}"
 fi
 
 # B. Auto-Configurator untuk editor lain (Misal Cursor) via node script sederhana

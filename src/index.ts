@@ -149,6 +149,12 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[nvstudio-mcp] MCP Server aktif melalui StdioServerTransport.");
+
+  // Tangani penutupan koneksi (misal IDE ditutup) agar server ikut mati
+  process.stdin.on('close', () => {
+    console.error("[nvstudio-mcp] Koneksi stdin ditutup oleh IDE. Mematikan server...");
+    process.exit(0);
+  });
 }
 
 main().catch((err) => {
