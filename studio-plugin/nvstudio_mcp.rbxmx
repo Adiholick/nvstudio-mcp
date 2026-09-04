@@ -1,7 +1,7 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 	<External>null</External>
 	<External>nil</External>
-	<Item class="Folder" referent="RBXF935B511C5604D66BB52FA708624B450">
+	<Item class="Folder" referent="RBX13E92E68D52142778374D88D664DCAA4">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -10,7 +10,7 @@
 			<int64 name="SourceAssetId">-1</int64>
 			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 		</Properties>
-		<Item class="Script" referent="RBX32A3CFCF1F724772B678196E4C56CEEB">
+		<Item class="Script" referent="RBXC229D16C6073413A8765031353EFB265">
 			<Properties>
 				<ProtectedString name="Source"><![CDATA[local HttpService = game:GetService("HttpService")
 local LogService = game:GetService("LogService")
@@ -202,7 +202,9 @@ function startPolling()
 	task.spawn(function()
 		while isConnected do
 			local success, response = pcall(function()
-				return HttpService:GetAsync(TASK_URL)
+				-- Tambahkan cache-buster agar Studio tidak me-cache response HTTP
+				local cacheBuster = "?t=" .. tostring(os.clock())
+				return HttpService:GetAsync(TASK_URL .. cacheBuster)
 			end)
 
 			-- PENTING: Cek ulang isConnected SETELAH HTTP request selesai.
@@ -270,7 +272,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXDC23CF9D9E1844A480F312156E8FE388">
+		<Item class="ModuleScript" referent="RBX526DBDB9DC0D4800AEB5047CF5A1D4E9">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -307,7 +309,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX8F0382F179434E1B948F76DA24FC5192">
+		<Item class="ModuleScript" referent="RBX85846C581D454B999653FBAD03525AC1">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -343,7 +345,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXBDB41FD0683A4F60AD765DB045804B31">
+		<Item class="ModuleScript" referent="RBX659001FE6FFE461C847C3448391F6A82">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -363,7 +365,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX4F56692EFA4241AF89EDAB3AB5A1A1AF">
+		<Item class="ModuleScript" referent="RBX4326600D86A046FAA2F9B99C6075BE28">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -383,7 +385,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX219FFF76892F4DD28C183F50407EBBAE">
+		<Item class="ModuleScript" referent="RBX49F55C3A41824F92AADA9D95B84FE1EF">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -403,7 +405,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX65EFC355176845A790C5E4BEC8A18FD1">
+		<Item class="ModuleScript" referent="RBX53A400ED17ED428FB25268DCEC731230">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -434,7 +436,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX0274E6046A8749DCA164088B85D4495C">
+		<Item class="ModuleScript" referent="RBX719B4081BBF843A88B95BD19374F545D">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -460,7 +462,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX69DEBBC7C1EB42718EDAB4FA6EF4A5CB">
+		<Item class="ModuleScript" referent="RBX91A24E2394A241F8BB5804F2324CFEF2">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -493,7 +495,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX6EC53E2FFB254C089518998E376A5BF5">
+		<Item class="ModuleScript" referent="RBXB32E3710F6964BE3BC322D1BC8F35A13">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -522,7 +524,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX8F6365CCBB704F18B6464674281F50C9">
+		<Item class="ModuleScript" referent="RBX89AB1DD4D99044EBA39B38D9228DEF8C">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local UIManager = {}
