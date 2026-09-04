@@ -11,10 +11,17 @@ Sistem ini didesain menggunakan **Hybrid Architecture** yang memisahkan logika E
 Langkah instalasinya **sangat gampang!**
 
 ### 1. Jalankan Installer (Otomatis)
-Buka Terminal Anda (atau Git Bash/WSL jika Anda menggunakan Windows), lalu cukup jalankan **skrip 1 baris** di bawah ini:
 
+Pilih perintah sesuai terminal yang Anda gunakan:
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/Adiholick/nvstudio-mcp/main/install.ps1 | iex
+```
+
+**macOS / Linux / Git Bash:**
 ```bash
-curl -sL https://raw.githubusercontent.com/Adiholick/nvstudio-mcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Adiholick/nvstudio-mcp/main/install.sh | bash
 ```
 
 
