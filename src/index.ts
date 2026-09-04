@@ -6,6 +6,20 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { startBridgeServer } from "./roblox-bridge";
 import { addTaskToQueue } from "./task-queue";
+import fs from 'fs';
+import path from 'path';
+
+const HISTORY_DIR = path.join(process.cwd(), '.history');
+if (!fs.existsSync(HISTORY_DIR)) {
+    fs.mkdirSync(HISTORY_DIR, { recursive: true });
+}
+
+function backupScript(target: string, code: string) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const safeTargetName = target.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `${safeTargetName}_${timestamp}.luau`;
+    fs.writeFileSync(path.join(HISTORY_DIR, fileName), code);
+}
 
 // 1. Impor dan jalankan server Express lokal di port 3000
 startBridgeServer(3000);
@@ -35,7 +49,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             command: {
               type: "string",
-              description: "Perintah yang akan dieksekusi (contoh: 'get_children', 'get_script_source', 'update_script_source').",
+              description: "Perintah yang akan dieksekusi (contoh: 'get_children', 'get_script_source', 'update_script_source', 'rollback_script').",
             },
             target: {
               type: "string",
@@ -144,6 +158,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // 7. Teruskan ke antrean dan kembalikan hasilnya sebagai string JSON
   try {
+    if (command === "update_script_source" && data) {
+      backupScript(target, String(data));
+    }
+
     const result = await addTaskToQueue(command, target, data);
     return {
       content: [

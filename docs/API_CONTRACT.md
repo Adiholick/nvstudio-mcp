@@ -49,3 +49,7 @@ Parser plugin wajib mendukung 3 perintah dasar ini:
 3. `update_script_source`: Menimpa properti Source pada target dengan string dari parameter data.
 4. `search_instance`: Mencari path absolut dari sebuah objek berdasarkan namanya secara semantik di direktori pencarian. Target `game`. Data `string` (nama instance).
 5. `create_instance`: Membuat instance baru secara native melalui script json config. Target path (misal `"Workspace"`). Data format JSON `{ "ClassName": "Part", "Properties": { "Name": "Part" } }`.
+6. `rollback_script`:
+   - **Fungsi:** Mengembalikan properti `Source` pada target ke versi sebelumnya jika AI berhalusinasi atau AST Validation gagal.
+   - **Parameter target:** Path absolut instance.
+   - **Parameter data:** Kosongkan.

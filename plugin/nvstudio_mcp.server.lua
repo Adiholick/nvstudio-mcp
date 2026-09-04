@@ -2,6 +2,8 @@ local HttpService = game:GetService("HttpService")
 local TASK_URL = "http://localhost:3000/api/tasks"
 local RESPONSE_URL = "http://localhost:3000/api/response"
 
+local scriptHistory = {} -- Menyimpan riwayat rollback untuk target
+
 -- Fungsi untuk mengurai path string (contoh: "Workspace.Map.Part") menjadi Instance
 local function getInstanceFromPath(path)
     local parts = string.split(path, ".")
@@ -51,8 +53,33 @@ local function processTask(taskData)
         
     elseif command == "update_script_source" then
         if targetInstance:IsA("LuaSourceContainer") then
-            targetInstance.Source = data or ""
-            return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil diperbarui." }
+            local newCode = data or ""
+            
+            -- Luau AST Validator (Mengecek syntax tanpa mengeksekusi)
+            local success, syntaxError = loadstring(newCode)
+            if not success then
+                return { 
+                    status = "error", 
+                    error = "SYNTAX ERROR (AST Validation Gagal): " .. tostring(syntaxError) .. ". Script dibatalkan. Silakan periksa kembali kodemu." 
+                }
+            end
+            
+            scriptHistory[target] = targetInstance.Source
+            targetInstance.Source = newCode
+            return { status = "success", result = "Script '" .. targetInstance.Name .. "' divalidasi dan berhasil diperbarui." }
+        else
+            return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
+        end
+        
+    elseif command == "rollback_script" then
+        if targetInstance:IsA("LuaSourceContainer") then
+            local prevSource = scriptHistory[target]
+            if prevSource then
+                targetInstance.Source = prevSource
+                return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil di-rollback ke versi sebelumnya." }
+            else
+                return { status = "error", error = "Tidak ada riwayat backup sebelumnya di sesi Studio ini untuk: " .. target }
+            end
         else
             return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
         end
