@@ -20,7 +20,7 @@ curl -sL https://raw.githubusercontent.com/Adiholick/nvstudio-mcp/main/install.s
 
 **Installer ini akan secara otomatis melakukan hal berikut:**
 - Memasang dependensi Node.js dan melakukan kompilasi TypeScript (*Bridge Server*).
-- Menyalin file plugin `nvstudio_mcp.rbxm` ke dalam sistem Plugin Roblox Studio di OS Anda (Windows/macOS/WSL) secara otomatis.
+- Menyalin file plugin `nvstudio_mcp.rbxmx` ke dalam sistem Plugin Roblox Studio di OS Anda (Windows/macOS/WSL) secara otomatis.
 - Mengintegrasikan *AI Agent Skills* langsung ke **Antigravity IDE** (`~/.gemini/config/plugins/nvstudio-mcp`).
 - Melakukan auto-konfigurasi JSON jika Anda menggunakan **Cursor Editor**.
 
@@ -57,9 +57,9 @@ Salin konfigurasi ini:
 Jika Anda ingin berhenti menggunakan `nvstudio-mcp`, Anda dapat membersihkannya dari sistem Anda secara menyeluruh dengan 4 langkah berikut:
 
 ### 1. Hapus Plugin dari Roblox Studio
-Hapus file plugin biner-nya dari folder lokal Roblox Anda.
-- **Windows:** Buka folder `%LOCALAPPDATA%\Roblox\Plugins` (atau `AppData\Local\Roblox\Plugins`) dan hapus file `nvstudio_mcp.rbxm`.
-- **macOS:** Buka folder `~/Documents/ROBLOX/Plugins` dan hapus file `nvstudio_mcp.rbxm`.
+Hapus file plugin dari folder lokal Roblox Anda.
+- **Windows:** Buka folder `%LOCALAPPDATA%\Roblox\Plugins` (atau `AppData\Local\Roblox\Plugins`) dan hapus file `nvstudio_mcp.rbxmx` (atau `nvstudio_mcp.rbxm`).
+- **macOS:** Buka folder `~/Documents/ROBLOX/Plugins` dan hapus file `nvstudio_mcp.rbxmx` (atau `nvstudio_mcp.rbxm`).
 
 ### 2. Hapus Agen dari Antigravity (Jika Menggunakan AGY)
 Hapus *bundle* keterampilan *anti-halusinasi* dari memori AI Anda:

@@ -1,6 +1,6 @@
 # BLUEPRINT: nvstudio-mcp (Fase 10 - Arsitektur Modular & Hybrid Installation Method)
 
-**Tujuan:** Merombak arsitektur plugin Roblox Studio menjadi sistem modular berbasis folder `skills` yang bersih dan independen, serta menyediakan sistem instalasi **Hybrid Method**. Sistem instalasi hybrid ini dapat memasang **Roblox Studio Plugin** (`.rbxm`), mengatur **MCP Otomatis** (untuk Cursor/Windsurf), sekaligus menyediakan **AI Agent Plugin Bundle** (untuk Claude/Antigravity) tanpa kerancuan.
+**Tujuan:** Merombak arsitektur plugin Roblox Studio menjadi sistem modular berbasis folder `skills` yang bersih dan independen, serta menyediakan sistem instalasi **Hybrid Method**. Sistem instalasi hybrid ini dapat memasang **Roblox Studio Plugin** (`.rbxmx`), mengatur **MCP Otomatis** (untuk Cursor/Windsurf), sekaligus menyediakan **AI Agent Plugin Bundle** (untuk Claude/Antigravity) tanpa kerancuan.
 
 ---
 
@@ -16,7 +16,7 @@ nvstudio-mcp/
 │
 ├── studio-plugin/                <-- [2. PLUGIN ROBLOX STUDIO] (Jelas & Tidak Ambigu)
 │   ├── init.server.lua           (Kernel router & background polling loop Luau)
-│   ├── nvstudio_mcp.rbxm         (Hasil kemasan/build model untuk installer sistem)
+│   ├── nvstudio_mcp.rbxmx        (Hasil kemasan/build model untuk installer sistem)
 │   └── skills/                   (Koleksi ModuleScript Luau independen)
 │       ├── get_children.lua
 │       ├── update_script_source.lua
@@ -37,7 +37,7 @@ nvstudio-mcp/
 | Karakteristik | `src/` (Core Bridge Server) | `studio-plugin/` (Plugin Roblox Studio) | `agent-plugin/` (Plugin AI Agent) |
 | :--- | :--- | :--- | :--- |
 | **Fungsi Utama** | Server penghubung JSON-RPC (MCP) ke HTTP polling | Mengeksekusi aksi nyata di dalam Roblox Studio | Menyuntikkan instruksi, *rules*, dan *tools* secara terpusat ke AI |
-| **Format Berkas** | TypeScript / Node.js | Luau / `.rbxm` | JSON & Markdown (`SKILL.md`) |
+| **Format Berkas** | TypeScript / Node.js | Luau / `.rbxmx` | JSON & Markdown (`SKILL.md`) |
 | **Distribusi (Installer)**| Dijalankan secara lokal (background) | Disalin ke `%LOCALAPPDATA%\Roblox\Plugins\` | Disalin ke direktori plugin AI (misal `~/.gemini/config/plugins/`) atau via perintah `/plugin install` |
 | **Metode Instalasi AI** | **Auto-Configurator** (Menginjeksi file `mcpServers.json` secara langsung) | - | **Plugin Bundle** (Dikelola resmi oleh lingkungan AI tanpa merusak config JSON) |
 
@@ -51,7 +51,7 @@ Folder plugin Roblox Studio dinamai secara eksplisit **`studio-plugin/`**:
 nvstudio-mcp/
 └── studio-plugin/
     ├── init.server.lua          # Router utama & polling worker
-    ├── nvstudio_mcp.rbxm        # Kemasan binary tunggal untuk folder sistem Roblox
+    ├── nvstudio_mcp.rbxmx       # Kemasan XML model tunggal untuk folder sistem Roblox
     └── skills/                  # Modul keterampilan terpisah (ModuleScript)
         ├── get_children.lua
         ├── get_script_source.lua
@@ -401,7 +401,7 @@ end
 
 ---
 
-## 5. Panduan Pembuatan File `.rbxm` (Roblox Binary Model)
+## 5. Panduan Pembuatan File `.rbxmx` (Roblox XML Model)
 
 Agar installer dapat memasang plugin sebagai satu berkas tunggal yang utuh ke folder Plugins Roblox Studio:
 
@@ -427,20 +427,20 @@ Agar installer dapat memasang plugin sebagai satu berkas tunggal yang utuh ke fo
      8. `insert_asset`
      9. `generate_terrain`
    - Buka masing-masing ModuleScript dan tempel kode dari file `.lua` yang sesuai.
-5. **Simpan ke File Model (`.rbxm`)**:
+5. **Simpan ke File Model (`.rbxmx`)**:
    - Klik kanan pada script induk **`nvstudio_mcp`** di jendela Explorer.
    - Pilih menu **"Save to File..."**.
-   - Beri nama file: **`nvstudio_mcp.rbxm`** (pilih tipe file *Roblox Model File (*.rbxm)*).
-   - Simpan berkas tersebut ke dalam folder direktori proyek: `studio-plugin/nvstudio_mcp.rbxm`.
+   - Beri nama file: **`nvstudio_mcp.rbxmx`** (pilih tipe file *Roblox XML Model (*.rbxmx)*).
+   - Simpan berkas tersebut ke dalam folder direktori proyek: `studio-plugin/nvstudio_mcp.rbxmx`.
 
 ---
 
 ## 6. Mekanisme Instalasi ke Sistem Roblox Studio
 
-Setelah file `studio-plugin/nvstudio_mcp.rbxm` tersedia, script installer `install.sh` atau auto-installer Node.js akan menyalinnya langsung ke folder plugins sistem:
+Setelah file `studio-plugin/nvstudio_mcp.rbxmx` tersedia, script installer `install.sh` atau auto-installer Node.js akan menyalinnya langsung ke folder plugins sistem:
 
-- **Windows**: `%LOCALAPPDATA%\Roblox\Plugins\nvstudio_mcp.rbxm`
-- **macOS**: `~/Documents/Roblox/Plugins/nvstudio_mcp.rbxm`
+- **Windows**: `%LOCALAPPDATA%\Roblox\Plugins\nvstudio_mcp.rbxmx`
+- **macOS**: `~/Documents/Roblox/Plugins/nvstudio_mcp.rbxmx`
 
 ### Penyesuaian pada `install.sh` (Untuk Sisi Roblox):
 ```bash
@@ -456,8 +456,8 @@ fi
 
 if [ -n "$PLUGIN_DIR" ]; then
     mkdir -p "$PLUGIN_DIR"
-    cp studio-plugin/nvstudio_mcp.rbxm "$PLUGIN_DIR/"
-    echo "✅ Plugin nvstudio_mcp.rbxm berhasil dipasang ke: $PLUGIN_DIR"
+    cp studio-plugin/nvstudio_mcp.rbxmx "$PLUGIN_DIR/"
+    echo "✅ Plugin nvstudio_mcp.rbxmx berhasil dipasang ke: $PLUGIN_DIR"
 fi
 ```
 
@@ -465,7 +465,7 @@ fi
 
 ## 7. Mekanisme Instalasi ke Sistem AI Agent (Metode Hybrid)
 
-Selain memasang `.rbxm` ke Roblox, installer `install.sh` juga akan mendeteksi lingkungan kerja pengembang (AI IDE mana yang digunakan) dan memasang konfigurasi MCP menggunakan **Metode Hybrid**:
+Selain memasang `.rbxmx` ke Roblox, installer `install.sh` juga akan mendeteksi lingkungan kerja pengembang (AI IDE mana yang digunakan) dan memasang konfigurasi MCP menggunakan **Metode Hybrid**:
 
 ### A. Metode Auto-Configurator (Untuk AI Berbasis JSON)
 Ditujukan untuk Editor yang membaca file konfigurasi `mcp.json` secara statis, seperti **Cursor** atau **Windsurf**. Installer akan menginjeksi entri ke file JSON pengguna secara terprogram menggunakan Node.js inline.

@@ -1,6 +1,6 @@
-# Panduan Kompilasi Roblox Model (.rbxm) Manual
+# Panduan Kompilasi Roblox Model (.rbxmx) Manual
 
-Karena AI tidak dapat menulis file binary/model (`.rbxm`) secara langsung ke disk, Anda harus mengkompilasi file-file skrip Luau mentah yang telah dibuat ke format `.rbxm` secara manual. Jangan khawatir, prosesnya sangat mudah.
+Karena AI tidak dapat menulis file model Roblox (`.rbxmx` / `.rbxm`) secara langsung ke disk, Anda harus mengkompilasi file-file skrip Luau mentah yang telah dibuat ke format `.rbxmx` secara manual. Jangan khawatir, prosesnya sangat mudah.
 
 ## Langkah-Langkah
 
@@ -32,9 +32,8 @@ Karena AI tidak dapat menulis file binary/model (`.rbxm`) secara langsung ke dis
       ... (dan 7 ModuleScript lainnya)
    ```
 10. Jika sudah, **klik kanan** tepat pada folder induk **`nvstudio_mcp`** di jendela Explorer.
-11. Pilih menu **"Save to File..."**.
-12. Pada jendela *save*, arahkan lokasi penyimpanan ke folder project Anda yaitu `d:\Developer\nvstudio-mcp\studio-plugin\`.
-13. Beri nama file: **`nvstudio_mcp.rbxm`** (pilih tipe file *Roblox Model File (*.rbxm)*).
-14. Tekan **Save**.
+11. Anda memiliki dua pilihan penyimpanan:
+    - **Metode A (Save to File):** Pilih **"Save to File..."** -> beri nama **`nvstudio_mcp.rbxmx`** (tipe *Roblox XML Model (*.rbxmx)*) di folder `studio-plugin/`.
+    - **Metode B (Save as Local Plugin):** Pilih **"Save as Local Plugin..."** -> Studio akan otomatis menyimpan file `.rbxmx` langsung ke folder plugins sistem lokal Roblox Anda.
 
-Selesai! Sekarang file biner `.rbxm` Anda yang berstruktur tingkat industri ini sudah siap di disk. Skrip instalasi `install.sh` akan dapat menyalinnya secara otomatis ke sistem Roblox Plugins di OS Anda!
+Selesai! Sekarang file `.rbxmx` Anda yang berstruktur tingkat industri ini sudah siap. Skrip instalasi `install.sh` juga akan menyalinnya secara otomatis ke sistem Roblox Plugins di OS Anda jika file tersebut ditaruh di folder `studio-plugin/`!

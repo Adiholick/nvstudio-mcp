@@ -26,10 +26,11 @@ local MAX_LOGS = 50
 local isConnected = false
 local autoConnect = plugin:GetSetting("AutoConnect") or false
 local isPolling = false
-local lastTaskTime = 0 -- Untuk logic transisi UI "Waiting" vs "Connected"
+local isClickDebounce = false -- Mencegah rapid double-click
 
 -- Deklarasi fungsi polling di awal agar bisa dipanggil oleh UI
 local startPolling
+local stopPolling
 
 -- Inisialisasi UI jika modul ditemukan
 if uiModule then
@@ -45,17 +46,27 @@ if uiModule then
         ui:toggleVisibility()
     end)
     
-    -- Event Tombol Connect
+    -- Event Tombol Connect (dengan debounce untuk mencegah double-click)
     ui.connectBtn.MouseButton1Click:Connect(function()
-        isConnected = not isConnected
-        if isConnected then
+        if isClickDebounce then return end
+        isClickDebounce = true
+        
+        if not isConnected then
+            -- CONNECT
+            isConnected = true
             ui:setStatus("waiting")
             ui:addLog("[System] Koneksi manual dimulai. Mencari AI Server (Waiting)...", Color3.fromRGB(255, 220, 100))
             startPolling()
         else
+            -- DISCONNECT — hentikan polling terlebih dahulu
+            stopPolling()
             ui:setStatus("disconnected")
             ui:addLog("[System] Koneksi dihentikan oleh pengguna.", Color3.fromRGB(255, 100, 100))
         end
+        
+        task.delay(0.3, function()
+            isClickDebounce = false
+        end)
     end)
     
     -- Event Custom Checkbox (Auto-Connect)
@@ -163,6 +174,12 @@ local function processTask(taskData)
     return result
 end
 
+-- Menghentikan polling dengan bersih (dipanggil oleh tombol Disconnect)
+function stopPolling()
+    isConnected = false
+    -- isPolling akan menjadi false secara otomatis saat loop keluar
+end
+
 -- Background Polling Loop (Dapat dihentikan oleh user)
 function startPolling()
     if isPolling then return end
@@ -173,6 +190,13 @@ function startPolling()
             local success, response = pcall(function()
                 return HttpService:GetAsync(TASK_URL)
             end)
+
+            -- PENTING: Cek ulang isConnected SETELAH HTTP request selesai.
+            -- Jika user menekan Disconnect saat request sedang berjalan,
+            -- kita TIDAK boleh menimpa status UI "disconnected" yang sudah di-set.
+            if not isConnected then
+                break
+            end
 
             if success and response then
                 -- JIKA PING SUKSES, Node.js menyala (IDE / Agen Sedang Terbuka!)
@@ -196,6 +220,10 @@ function startPolling()
                 if ui then ui:setStatus("waiting") end
             end
             
+            -- Cek lagi sebelum sleep (agar disconnect lebih responsif)
+            if not isConnected then
+                break
+            end
             task.wait(1)
         end
         isPolling = false

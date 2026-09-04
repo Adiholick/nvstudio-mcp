@@ -33,7 +33,7 @@ npm install
 echo "🛠️ Mengkompilasi TypeScript..."
 npm run build
 
-# 4. Pemasangan Plugin Studio (.rbxm)
+# 4. Pemasangan Plugin Studio (.rbxmx / .rbxm)
 echo "🧩 Memasang Plugin Roblox Studio..."
 PLUGIN_DIR=""
 
@@ -51,14 +51,17 @@ fi
 
 if [ -n "$PLUGIN_DIR" ]; then
     mkdir -p "$PLUGIN_DIR"
-    if [ -f "studio-plugin/nvstudio_mcp.rbxm" ]; then
+    if [ -f "studio-plugin/nvstudio_mcp.rbxmx" ]; then
+        cp studio-plugin/nvstudio_mcp.rbxmx "$PLUGIN_DIR/"
+        echo "✅ Plugin nvstudio_mcp.rbxmx berhasil dipasang ke: $PLUGIN_DIR"
+    elif [ -f "studio-plugin/nvstudio_mcp.rbxm" ]; then
         cp studio-plugin/nvstudio_mcp.rbxm "$PLUGIN_DIR/"
         echo "✅ Plugin nvstudio_mcp.rbxm berhasil dipasang ke: $PLUGIN_DIR"
     else
-        echo "⚠️  File nvstudio_mcp.rbxm belum dicompile (Tidak ditemukan di folder). Harap compile secara manual sesuai instruksi!"
+        echo "⚠️  File nvstudio_mcp.rbxmx belum dicompile (Tidak ditemukan di folder). Harap compile secara manual sesuai instruksi!"
     fi
 else
-    echo "⚠️ OS tidak terdeteksi secara spesifik. Silakan pasang file .rbxm secara manual."
+    echo "⚠️ OS tidak terdeteksi secara spesifik. Silakan pasang file plugin secara manual."
 fi
 
 # 5. Hybrid AI Installer
