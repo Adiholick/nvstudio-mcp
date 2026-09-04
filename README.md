@@ -47,15 +47,16 @@ Salin konfigurasi ini:
 {
   "mcpServers": {
     "nvstudio-mcp": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "C:/Path/Ke/Folder/nvstudio-mcp/dist/index.js"
+        "-y",
+        "@adiholick/nvstudio-mcp@latest"
       ]
     }
   }
 }
 ```
-*(Ingat untuk mengganti path `args` di atas dengan direktori instalasi aktual Anda, biasanya berada di `~/.nvstudio-mcp/dist/index.js`).*
+*(Dengan ini, AI Anda akan selalu mengunduh dan menjalankan versi terbaru dari server Bridge langsung dari NPM, tanpa perlu path folder lokal!)*
 
 ---
 

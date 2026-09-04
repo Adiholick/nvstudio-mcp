@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
+import { exec } from 'child_process';
 import { taskQueue, pendingTasks, resolvePendingTask } from './task-queue';
 
 export function startBridgeServer(port: number = 3055) {
@@ -11,10 +12,19 @@ export function startBridgeServer(port: number = 3055) {
 
     // FIX: Menaikkan limit ke 50mb agar file .Source (Lua) yang besar tidak melempar error 413 Payload Too Large
     app.use(express.json({ limit: '50mb' }));
-    app.use(express.static(path.join(process.cwd(), 'public')));
+    app.use(express.static(path.join(__dirname, '../public')));
+
+    let dashboardOpened = false;
 
     // Endpoint Studio Polling
     app.get('/api/tasks', (req, res) => {
+        if (!dashboardOpened) {
+            dashboardOpened = true;
+            const startCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+            exec(`${startCmd} http://localhost:${port}`);
+            console.error(`[Bridge] Pertama kali terhubung dengan Studio! Membuka Dashboard...`);
+        }
+
         if (taskQueue.length > 0) {
             const task = taskQueue.shift();
             io.emit('log', `[AI Task] Mengirim perintah '${task?.command}' ke Studio.`);
