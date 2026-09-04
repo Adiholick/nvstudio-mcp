@@ -1,12 +1,13 @@
 {
   "name": "@adiholick/nvstudio-mcp",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "Local Bridge Server MCP for Roblox Studio",
   "main": "dist/index.js",
   "bin": "dist/index.js",
   "files": [
     "dist",
-    "public"
+    "public",
+    "studio-plugin"
   ],
   "scripts": {
     "build": "tsc",

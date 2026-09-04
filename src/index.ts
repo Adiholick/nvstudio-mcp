@@ -44,7 +44,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "call_mcp_tool",
-        description: "ALAT MUTLAK UNTUK ROBLOX. DILARANG KERAS menggunakan PowerShell atau skrip bypass (fetch_mcp_source.js). WAJIB memanggil 'get_children' terlebih dahulu sebelum 'get_script_source' untuk memverifikasi tipe instance agar tidak terjadi error teks kosong.",
+        description: "ALAT MUTLAK UNTUK ROBLOX. DILARANG KERAS menggunakan PowerShell atau skrip bypass (fetch_mcp_source.js). WAJIB memanggil 'get_children' terlebih dahulu sebelum 'get_script_source'. Command: get_children, get_script_source, update_script_source, rollback_script, get_logs, create_instance, search_instance, generate_terrain, insert_asset, delete_instance, get_properties, script_grep, execute_luau, search_asset.",
         inputSchema: {
           type: "object",
           properties: {
@@ -114,7 +114,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  // 7. Teruskan ke antrean dan kembalikan hasilnya sebagai string JSON
+  // 7. Intercept command yang dieksekusi di server lokal (Node.js) alih-alih di Studio
+  if (command === "search_asset" && data) {
+    try {
+      const queryParams = typeof data === "string" ? JSON.parse(data) : data;
+      const keyword = encodeURIComponent(queryParams.keyword || "");
+      let assetType = "10"; // Default: Model
+      
+      if (queryParams.category === "Audio") {
+          assetType = "9"; // Audio
+      } else if (queryParams.category === "Decal" || queryParams.category === "Image") {
+          assetType = "13"; // Decal
+      }
+      
+      const url = `https://catalog.roblox.com/v1/search/items?category=All&keyword=${keyword}&limit=10&itemTypes=Asset&assetTypes=${assetType}`;
+      const res = await fetch(url);
+      const jsonRes = await res.json();
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              status: "success",
+              result: jsonRes.data || jsonRes
+            }, null, 2)
+          }
+        ]
+      };
+    } catch (err: any) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ status: "error", error: "Gagal mencari aset: " + err.message }) }],
+        isError: true
+      };
+    }
+  }
+
+  // 8. Teruskan ke antrean dan kembalikan hasilnya sebagai string JSON
   try {
     if (command === "update_script_source" && data) {
       backupScript(target, String(data));

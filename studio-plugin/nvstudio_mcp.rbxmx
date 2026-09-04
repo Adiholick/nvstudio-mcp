@@ -1,7 +1,7 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 	<External>null</External>
 	<External>nil</External>
-	<Item class="Folder" referent="RBX13E92E68D52142778374D88D664DCAA4">
+	<Item class="Folder" referent="RBX0497167F99814CA6A2096BB729707905">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -10,7 +10,7 @@
 			<int64 name="SourceAssetId">-1</int64>
 			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 		</Properties>
-		<Item class="Script" referent="RBXC229D16C6073413A8765031353EFB265">
+		<Item class="Script" referent="RBX749E4D5306E74B7C8E355593066F1D2B">
 			<Properties>
 				<ProtectedString name="Source"><![CDATA[local HttpService = game:GetService("HttpService")
 local LogService = game:GetService("LogService")
@@ -66,13 +66,14 @@ if uiModule then
 		isClickDebounce = true
 
 		if not isConnected then
-			-- CONNECT
+			-- CONNECT (manual) — reset manual disconnect flag agar auto-detect bisa bekerja
+			isManualDisconnect = false
 			isConnected = true
 			ui:setStatus("waiting")
 			ui:addLog("[System] Koneksi manual dimulai. Mencari AI Server (Waiting)...", Color3.fromRGB(255, 220, 100))
 			startPolling()
 		else
-			-- DISCONNECT — hentikan polling terlebih dahulu
+			-- DISCONNECT — hentikan polling dan tandai manual disconnect
 			stopPolling()
 			ui:setStatus("disconnected")
 			ui:addLog("[System] Koneksi dihentikan oleh pengguna.", Color3.fromRGB(255, 100, 100))
@@ -189,8 +190,11 @@ local function processTask(taskData)
 end
 
 -- Menghentikan polling dengan bersih (dipanggil oleh tombol Disconnect)
+local isManualDisconnect = false -- Mencegah auto-reconnect saat user sengaja disconnect
+
 function stopPolling()
 	isConnected = false
+	isManualDisconnect = true
 	-- isPolling akan menjadi false secara otomatis saat loop keluar
 end
 
@@ -246,19 +250,59 @@ function startPolling()
 	end)
 end
 
--- Eksekusi Awal (Start-up)
-if autoConnect then
-	isConnected = true
+-- ══════════════════════════════════════════════════════════════════════
+-- AUTO-DETECT: Background heartbeat yang SELALU berjalan.
+-- Mendeteksi apakah server MCP aktif setiap 2 detik.
+-- Jika terdeteksi aktif → otomatis connect (tanpa perlu tekan tombol).
+-- Jika terdeteksi mati → otomatis update status.
+-- ══════════════════════════════════════════════════════════════════════
+task.spawn(function()
+	task.wait(1) -- Tunggu sebentar agar UI siap
+
 	if ui then
-		ui:setStatus("waiting")
-		ui:addLog("[System] Auto-Connect menyala. Mencari jembatan Node.js...", Color3.fromRGB(255, 220, 100))
+		ui:addLog("[System] Plugin termuat. Auto-detect server MCP aktif...", Color3.fromRGB(200, 200, 200))
 	end
-	startPolling()
-else
-	if ui then
-		ui:addLog("[System] Plugin termuat sukses. Tekan 'Connect' di atas untuk menyambung.", Color3.fromRGB(200, 200, 200))
+
+	while true do
+		-- Skip heartbeat jika polling loop sudah aktif (ia sudah menangani semuanya)
+		if not isPolling then
+			local success, errorMsg = pcall(function()
+				local cacheBuster = "?t=" .. tostring(os.clock())
+				return HttpService:GetAsync(TASK_URL .. cacheBuster)
+			end)
+
+			if success then
+				-- Server terdeteksi aktif!
+				if not isConnected and not isManualDisconnect then
+					isConnected = true
+					if ui then
+						ui:setStatus("connected")
+						ui:addLog("[System] Server MCP terdeteksi! Auto-connected.", Color3.fromRGB(100, 255, 100))
+					end
+					startPolling()
+				end
+			else
+				-- Server tidak aktif
+				if isConnected then
+					-- Server baru saja mati (sebelumnya connected) — polling loop juga akan exit
+					isConnected = false
+					if ui then
+						ui:setStatus("waiting")
+						ui:addLog("[System] Server MCP terputus. Menunggu reconnect...", Color3.fromRGB(255, 200, 100))
+					end
+				elseif not isManualDisconnect then
+					if ui then 
+						ui:setStatus("waiting") 
+						-- HANYA print error jika belum terkoneksi, untuk debugging
+						ui:addLog("[Debug] Deteksi gagal: " .. tostring(errorMsg), Color3.fromRGB(150, 150, 150))
+					end
+				end
+			end
+		end
+
+		task.wait(2)
 	end
-end
+end)
 ]]></ProtectedString>
 				<bool name="Disabled">false</bool>
 				<Content name="LinkedSource"><null></null></Content>
@@ -272,7 +316,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX526DBDB9DC0D4800AEB5047CF5A1D4E9">
+		<Item class="ModuleScript" referent="RBXF88A8EA0FA1B449280110AA8E425E2C9">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -309,7 +353,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX85846C581D454B999653FBAD03525AC1">
+		<Item class="ModuleScript" referent="RBXA056230ABABC48FFBC66487DC4B83FB2">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -345,7 +389,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX659001FE6FFE461C847C3448391F6A82">
+		<Item class="ModuleScript" referent="RBX020FB330A8554FAFA0499639D23AB46D">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -365,7 +409,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX4326600D86A046FAA2F9B99C6075BE28">
+		<Item class="ModuleScript" referent="RBX625EEDF3B809470F94D6CA72BD468ED6">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -385,7 +429,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX49F55C3A41824F92AADA9D95B84FE1EF">
+		<Item class="ModuleScript" referent="RBXE5B71E01ACBE4AD0B6DC072381E6F57B">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -405,7 +449,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX53A400ED17ED428FB25268DCEC731230">
+		<Item class="ModuleScript" referent="RBX8A29B2C0C1804D6A9A8C3DEBD337010E">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -436,7 +480,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX719B4081BBF843A88B95BD19374F545D">
+		<Item class="ModuleScript" referent="RBXB2C4DDC5A9A84FC5B6318F52E35AF483">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -462,7 +506,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX91A24E2394A241F8BB5804F2324CFEF2">
+		<Item class="ModuleScript" referent="RBX4A79E3095F604AFEB115D7444BDB20B3">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -495,7 +539,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXB32E3710F6964BE3BC322D1BC8F35A13">
+		<Item class="ModuleScript" referent="RBX543373412A5740FCB6655A9B57FBE9D7">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
@@ -524,7 +568,7 @@ end
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX89AB1DD4D99044EBA39B38D9228DEF8C">
+		<Item class="ModuleScript" referent="RBX67FD07EDDECD4543B003A3628AF30B03">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local UIManager = {}
@@ -976,6 +1020,312 @@ return UIManager
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">ui_manager</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX6852D813E05543C487103F791CF924EF">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+	local code = data
+	if not code or code == "" then
+		return { status = "error", error = "Kode yang dieksekusi tidak boleh kosong." }
+	end
+
+	local HttpService = game:GetService("HttpService")
+
+	-- Bungkus code ke dalam fungsi return
+	local wrappedCode = "return function()\n" .. code .. "\nend"
+
+	local moduleScript = Instance.new("ModuleScript")
+	moduleScript.Name = "AI_Execute_Temp"
+	moduleScript.Source = wrappedCode
+
+	-- Taruh di ReplicatedStorage sementara agar bisa di-require
+	moduleScript.Parent = game:GetService("ReplicatedStorage")
+
+	local resultData = nil
+	local execError = nil
+	local isFinished = false
+
+	-- Eksekusi asinkron dengan batas waktu (timeout) 5 detik
+	task.spawn(function()
+		local reqSuccess, func = pcall(function() return require(moduleScript) end)
+		if reqSuccess and type(func) == "function" then
+			local execSuccess, res = pcall(func)
+			if execSuccess then
+				resultData = res
+			else
+				execError = "Runtime Error: " .. tostring(res)
+			end
+		else
+			execError = "Syntax/Require Error: " .. tostring(func)
+		end
+		isFinished = true
+	end)
+
+	-- Tunggu hingga 5 detik
+	local timeWaited = 0
+	while not isFinished and timeWaited < 5 do
+		timeWaited = timeWaited + task.wait()
+	end
+
+	-- Pembersihan (Wajib dihancurkan)
+	pcall(function() moduleScript:Destroy() end)
+
+	if not isFinished then
+		return { status = "error", error = "Timeout 5 detik terlampaui. Kemungkinan ada infinite loop tanpa task.wait()." }
+	end
+
+	if execError then
+		return { status = "error", error = execError }
+	end
+
+	-- Cegah return nil error
+	if resultData == nil then
+		return { status = "success", result = "Eksekusi berhasil (Tidak ada nilai kembalian)." }
+	end
+
+	-- JSON Encode untuk mencegah raw Instance return crash
+	local serializeSuccess, jsonRes = pcall(function()
+		return HttpService:JSONEncode(resultData)
+	end)
+
+	if serializeSuccess then
+		return { status = "success", result = HttpService:JSONDecode(jsonRes) } -- decode kembali agar format aslinya diteruskan oleh router
+	else
+		return { status = "error", error = "Gagal menserialisasi hasil (Dilarang mengembalikan raw Roblox Instance): " .. tostring(jsonRes) }
+	end
+end
+]]></ProtectedString>
+				<string name="ScriptGuid">{E656AA51-AC95-4EED-9C73-CA164FE1FA52}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">execute_luau</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX87CCA7F1F7C047D69399148376B5D38E">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+	-- Guardrail: Cegah penghapusan Service utama
+	local protectedServices = {
+		"Workspace", "Players", "Lighting", "MaterialService", "NetworkClient", 
+		"ReplicatedFirst", "ReplicatedStorage", "ServerScriptService", "ServerStorage", 
+		"StarterGui", "StarterPack", "StarterPlayer", "Teams", "SoundService", "Chat", 
+		"TextChatService", "VoiceChatService"
+	}
+
+	if targetInstance.Parent == game or targetInstance.Parent == nil then
+		for _, serviceName in ipairs(protectedServices) do
+			if targetInstance.Name == serviceName or targetInstance.ClassName == serviceName then
+				return { status = "error", error = "GUARDRAIL BLOCKED: Anda tidak diizinkan untuk menghapus layanan tingkat atas (" .. targetInstance.Name .. ")." }
+			end
+		end
+	end
+
+	local name = targetInstance.Name
+	local className = targetInstance.ClassName
+	local parentName = targetInstance.Parent and targetInstance.Parent.Name or "nil"
+
+	local success, err = pcall(function()
+		targetInstance:Destroy()
+	end)
+
+	if success then
+		return { status = "success", result = "Instance '" .. name .. "' (" .. className .. ") berhasil dihapus dari " .. parentName .. "." }
+	else
+		return { status = "error", error = "Gagal menghapus instance: " .. tostring(err) }
+	end
+end
+]]></ProtectedString>
+				<string name="ScriptGuid">{EBD3665C-2719-4288-930C-3902EFF4CCB6}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">delete_instance</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX57ADCE105E57454897B1666DA1D52563">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+	local success, config = pcall(function() return ctx.HttpService:JSONDecode(data) end)
+	if not success or not config.ClassName then
+		return { status = "error", error = "Format data JSON tidak valid atau ClassName hilang." }
+	end
+
+	local newSuccess, newInst = pcall(function()
+		local inst = Instance.new(config.ClassName)
+		inst.Parent = targetInstance
+
+		if config.Properties then
+			for prop, val in pairs(config.Properties) do
+				pcall(function() inst[prop] = val end)
+			end
+		end
+		return inst
+	end)
+
+	if newSuccess then
+		return { status = "success", result = "Instance '"..config.ClassName.."' berhasil dibuat di " .. targetPath }
+	else
+		return { status = "error", error = "Gagal membuat Instance. Pastikan ClassName valid." }
+	end
+end
+]]></ProtectedString>
+				<string name="ScriptGuid">{4F0529C1-A158-4652-B56B-A8B224EF87F5}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">create_instance</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBXCA3AFE3B00224D6686C665EF3D5A6DAA">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+	local CollectionService = game:GetService("CollectionService")
+
+	local props = {
+		Name = targetInstance.Name,
+		ClassName = targetInstance.ClassName,
+		Parent = targetInstance.Parent and targetInstance.Parent.Name or "nil",
+	}
+
+	-- Ambil Properties Umum secara aman via pcall
+	local function tryProp(propName)
+		local success, val = pcall(function() return targetInstance[propName] end)
+		if success and val ~= nil then
+			if typeof(val) == "Vector3" then
+				props[propName] = {math.round(val.X*100)/100, math.round(val.Y*100)/100, math.round(val.Z*100)/100}
+			elseif typeof(val) == "Color3" then
+				props[propName] = {math.round(val.R * 255), math.round(val.G * 255), math.round(val.B * 255)}
+			elseif typeof(val) == "CFrame" then
+				props[propName] = tostring(val)
+			elseif typeof(val) == "EnumItem" then
+				props[propName] = val.Name
+			elseif typeof(val) == "UDim2" then
+				props[propName] = {val.X.Scale, val.X.Offset, val.Y.Scale, val.Y.Offset}
+			elseif typeof(val) == "Instance" then
+				props[propName] = val:GetFullName()
+			else
+				props[propName] = val
+			end
+		end
+	end
+
+	local commonProps = {
+		"Anchored", "CanCollide", "Transparency", "Reflectance", 
+		"Position", "Size", "Color", "Material", "Text", "TextColor3", 
+		"BackgroundTransparency", "BackgroundColor3", "Visible", "Enabled",
+		"Volume", "Playing", "Looped", "Value"
+	}
+
+	for _, prop in ipairs(commonProps) do
+		tryProp(prop)
+	end
+
+	-- Attributes & Tags
+	pcall(function()
+		props.Attributes = targetInstance:GetAttributes()
+	end)
+	pcall(function()
+		props.Tags = CollectionService:GetTags(targetInstance)
+	end)
+
+	return { status = "success", result = props }
+end
+]]></ProtectedString>
+				<string name="ScriptGuid">{3B18E6FF-1FFC-4B48-936D-8471CB3820C6}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">get_properties</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBXD0E8AE88B6B24ECE9F916D7EFC8F978E">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+	local query = tostring(data)
+	if not query or query == "" then
+		return { status = "error", error = "Query pencarian tidak boleh kosong." }
+	end
+
+	local matches = {}
+	local matchCount = 0
+	local MAX_MATCHES = 50
+
+	local searchableServices = {
+		game:GetService("Workspace"),
+		game:GetService("ServerScriptService"),
+		game:GetService("ReplicatedStorage"),
+		game:GetService("StarterPlayer"),
+		game:GetService("StarterGui")
+	}
+
+	local function searchInScript(scriptObj)
+		local success, source = pcall(function() return scriptObj.Source end)
+		if not success or not source then return end
+
+		local lines = string.split(source, "\n")
+		for i, line in ipairs(lines) do
+			-- Coba cari dengan plain text dulu, jika gagal coba pattern
+			local found = string.find(line, query, 1, true)
+			if not found then
+				pcall(function() found = string.find(line, query) end)
+			end
+
+			if found then
+				table.insert(matches, {
+					script = scriptObj:GetFullName(),
+					line = i,
+					content = string.match(line, "^%s*(.-)%s*$") or line
+				})
+				matchCount = matchCount + 1
+				if matchCount >= MAX_MATCHES then
+					return true
+				end
+			end
+		end
+		return false
+	end
+
+	for _, service in ipairs(searchableServices) do
+		pcall(function()
+			local descendants = service:GetDescendants()
+			for _, desc in ipairs(descendants) do
+				if desc:IsA("LuaSourceContainer") then
+					if searchInScript(desc) then
+						break
+					end
+				end
+			end
+		end)
+		if matchCount >= MAX_MATCHES then
+			break
+		end
+	end
+
+	return { status = "success", matches = matches, count = matchCount, limitReached = (matchCount >= MAX_MATCHES) }
+end
+]]></ProtectedString>
+				<string name="ScriptGuid">{74D52488-8890-4D93-B5D6-37BBE9F0DF1E}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">script_grep</string>
 				<int64 name="SourceAssetId">-1</int64>
 				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>

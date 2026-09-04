@@ -252,9 +252,9 @@ task.spawn(function()
     while true do
         -- Skip heartbeat jika polling loop sudah aktif (ia sudah menangani semuanya)
         if not isPolling then
-            local success = pcall(function()
+            local success, errorMsg = pcall(function()
                 local cacheBuster = "?t=" .. tostring(os.clock())
-                HttpService:GetAsync(TASK_URL .. cacheBuster)
+                return HttpService:GetAsync(TASK_URL .. cacheBuster)
             end)
             
             if success then
@@ -277,7 +277,11 @@ task.spawn(function()
                         ui:addLog("[System] Server MCP terputus. Menunggu reconnect...", Color3.fromRGB(255, 200, 100))
                     end
                 elseif not isManualDisconnect then
-                    if ui then ui:setStatus("waiting") end
+                    if ui then 
+                        ui:setStatus("waiting") 
+                        -- HANYA print error jika belum terkoneksi, untuk debugging
+                        ui:addLog("[Debug] Deteksi gagal: " .. tostring(errorMsg), Color3.fromRGB(150, 150, 150))
+                    end
                 end
             end
         end
