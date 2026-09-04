@@ -21,8 +21,8 @@ function backupScript(target: string, code: string) {
     fs.writeFileSync(path.join(HISTORY_DIR, fileName), code);
 }
 
-// 1. Impor dan jalankan server Express lokal di port 3000
-startBridgeServer(3000);
+// 1. Impor dan jalankan server Express lokal di port 3055
+startBridgeServer(3055);
 
 // 2. Inisialisasi server MCP
 const server = new Server(

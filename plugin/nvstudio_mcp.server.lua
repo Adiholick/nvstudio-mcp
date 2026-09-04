@@ -1,6 +1,6 @@
 local HttpService = game:GetService("HttpService")
-local TASK_URL = "http://localhost:3000/api/tasks"
-local RESPONSE_URL = "http://localhost:3000/api/response"
+local TASK_URL = "http://localhost:3055/api/tasks"
+local RESPONSE_URL = "http://localhost:3055/api/response"
 
 local scriptHistory = {} -- Menyimpan riwayat rollback untuk target
 
@@ -158,6 +158,48 @@ local function processTask(taskData)
             return { status = "success", result = "Instance '"..config.ClassName.."' berhasil dibuat di " .. target }
         else
             return { status = "error", error = "Gagal membuat Instance. Pastikan ClassName valid." }
+        end
+
+    elseif command == "insert_asset" then
+        local InsertService = game:GetService("InsertService")
+        local assetId = tonumber(data)
+        if not assetId then
+            return { status = "error", error = "Asset ID harus berupa angka yang valid." }
+        end
+        
+        local success, model = pcall(function()
+            return InsertService:LoadAsset(assetId)
+        end)
+        
+        if success and model then
+            model.Parent = game.Workspace
+            return { status = "success", result = "Aset berhasil dimasukkan ke Workspace." }
+        else
+            return { status = "error", error = "Gagal memuat aset. Pastikan Asset ID benar dan akun/plugin Anda memiliki izin (Ownership/Public)." }
+        end
+
+    elseif command == "generate_terrain" then
+        local success, config = pcall(function() return HttpService:JSONDecode(data) end)
+        if not success or not config.Size or not config.Position or not config.Material then
+            return { status = "error", error = "Format JSON tidak valid. Membutuhkan Size, Position, dan Material." }
+        end
+        
+        local terrain = game.Workspace.Terrain
+        local materialEnum = Enum.Material[config.Material] or Enum.Material.Grass
+        
+        local size = Vector3.new(config.Size[1], config.Size[2], config.Size[3])
+        local position = Vector3.new(config.Position[1], config.Position[2], config.Position[3])
+        
+        local region = Region3.new(position - (size/2), position + (size/2))
+        
+        local fillSuccess, err = pcall(function()
+            terrain:FillRegion(region:ExpandToGrid(4), 4, materialEnum)
+        end)
+        
+        if fillSuccess then
+            return { status = "success", result = "Terrain (" .. config.Material .. ") berhasil di-generate." }
+        else
+            return { status = "error", error = "Gagal men-generate Terrain: " .. tostring(err) }
         end
 
     else

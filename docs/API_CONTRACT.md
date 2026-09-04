@@ -57,3 +57,11 @@ Parser plugin wajib mendukung 3 perintah dasar ini:
    - **Fungsi:** Mengambil 50 baris terakhir dari Output Console Roblox Studio. Sangat penting digunakan setelah memodifikasi script untuk memastikan tidak ada runtime error.
    - **Parameter target:** `"game"`
    - **Parameter data:** Kosongkan.
+8. `insert_asset`:
+   - **Fungsi:** Memasukkan model 3D/aset dari Roblox Creator Store langsung ke Workspace.
+   - **Parameter target:** `"game"`
+   - **Parameter data:** String/Number berisi ID Aset (contoh: `12345678`).
+9. `generate_terrain`:
+   - **Fungsi:** Membuat blok daratan (*voxel terrain*) secara instan.
+   - **Parameter target:** `"Workspace.Terrain"`
+   - **Parameter data:** String JSON berisi konfigurasi Terrain. Contoh: `{"Size": [50, 10, 50], "Position": [0, -5, 0], "Material": "Grass"}`
