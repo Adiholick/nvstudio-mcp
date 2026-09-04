@@ -52,13 +52,14 @@ if uiModule then
         isClickDebounce = true
         
         if not isConnected then
-            -- CONNECT
+            -- CONNECT (manual) — reset manual disconnect flag agar auto-detect bisa bekerja
+            isManualDisconnect = false
             isConnected = true
             ui:setStatus("waiting")
             ui:addLog("[System] Koneksi manual dimulai. Mencari AI Server (Waiting)...", Color3.fromRGB(255, 220, 100))
             startPolling()
         else
-            -- DISCONNECT — hentikan polling terlebih dahulu
+            -- DISCONNECT — hentikan polling dan tandai manual disconnect
             stopPolling()
             ui:setStatus("disconnected")
             ui:addLog("[System] Koneksi dihentikan oleh pengguna.", Color3.fromRGB(255, 100, 100))
@@ -175,8 +176,11 @@ local function processTask(taskData)
 end
 
 -- Menghentikan polling dengan bersih (dipanggil oleh tombol Disconnect)
+local isManualDisconnect = false -- Mencegah auto-reconnect saat user sengaja disconnect
+
 function stopPolling()
     isConnected = false
+    isManualDisconnect = true
     -- isPolling akan menjadi false secara otomatis saat loop keluar
 end
 
@@ -232,16 +236,52 @@ function startPolling()
     end)
 end
 
--- Eksekusi Awal (Start-up)
-if autoConnect then
-    isConnected = true
+-- ══════════════════════════════════════════════════════════════════════
+-- AUTO-DETECT: Background heartbeat yang SELALU berjalan.
+-- Mendeteksi apakah server MCP aktif setiap 2 detik.
+-- Jika terdeteksi aktif → otomatis connect (tanpa perlu tekan tombol).
+-- Jika terdeteksi mati → otomatis update status.
+-- ══════════════════════════════════════════════════════════════════════
+task.spawn(function()
+    task.wait(1) -- Tunggu sebentar agar UI siap
+    
     if ui then
-        ui:setStatus("waiting")
-        ui:addLog("[System] Auto-Connect menyala. Mencari jembatan Node.js...", Color3.fromRGB(255, 220, 100))
+        ui:addLog("[System] Plugin termuat. Auto-detect server MCP aktif...", Color3.fromRGB(200, 200, 200))
     end
-    startPolling()
-else
-    if ui then
-        ui:addLog("[System] Plugin termuat sukses. Tekan 'Connect' di atas untuk menyambung.", Color3.fromRGB(200, 200, 200))
+    
+    while true do
+        -- Skip heartbeat jika polling loop sudah aktif (ia sudah menangani semuanya)
+        if not isPolling then
+            local success = pcall(function()
+                local cacheBuster = "?t=" .. tostring(os.clock())
+                HttpService:GetAsync(TASK_URL .. cacheBuster)
+            end)
+            
+            if success then
+                -- Server terdeteksi aktif!
+                if not isConnected and not isManualDisconnect then
+                    isConnected = true
+                    if ui then
+                        ui:setStatus("connected")
+                        ui:addLog("[System] Server MCP terdeteksi! Auto-connected.", Color3.fromRGB(100, 255, 100))
+                    end
+                    startPolling()
+                end
+            else
+                -- Server tidak aktif
+                if isConnected then
+                    -- Server baru saja mati (sebelumnya connected) — polling loop juga akan exit
+                    isConnected = false
+                    if ui then
+                        ui:setStatus("waiting")
+                        ui:addLog("[System] Server MCP terputus. Menunggu reconnect...", Color3.fromRGB(255, 200, 100))
+                    end
+                elseif not isManualDisconnect then
+                    if ui then ui:setStatus("waiting") end
+                end
+            end
+        end
+        
+        task.wait(2)
     end
-end
+end)
