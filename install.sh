@@ -84,29 +84,31 @@ echo "   -> Mengeksekusi injeksi MCP JSON (Cursor Auto-Configurator jika direkto
 node --input-type=commonjs -e '
 const fs = require("fs");
 const path = require("path");
-const configPath = path.join(process.cwd(), ".cursor", "mcp.json");
-if (fs.existsSync(path.dirname(configPath))) {
-    let config = {};
-    try { config = JSON.parse(fs.readFileSync(configPath, "utf8")); } catch(e) {}
-    if (!config.mcpServers) config.mcpServers = {};
-    config.mcpServers["nvstudio-mcp"] = {
-        command: "node",
-        args: [process.cwd() + "/dist/index.js"]
-    };
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    console.log("✅ Berhasil menginjeksi konfigurasi ke .cursor/mcp.json");
+CURSOR_MCP="$HOME/.cursor/mcp.json"
+if [ -d "$HOME/.cursor" ]; then
+    # Buat atau update mcp.json untuk nvstudio-mcp
+    cat > "$CURSOR_MCP" << EOL
+{
+  "mcpServers": {
+    "nvstudio-mcp": {
+      "command": "npx",
+      "args": ["-y", "@adiholick/nvstudio-mcp@latest"]
+    }
+  }
 }
-' || true
+EOL
+    echo -e "${GREEN}✅ Berhasil menginjeksi konfigurasi ke $CURSOR_MCP${NC}"
+fi
 
 # 6. Output Konfigurasi Selesai
 echo ""
-echo "🎉 Instalasi nvstudio-mcp Selesai!"
-echo "================================================================="
+echo -e "${GREEN}🎉 Instalasi nvstudio-mcp Selesai!${NC}"
+echo -e "${CYAN}=================================================================${NC}"
 echo "Untuk menghubungkan AI yang tidak terdeteksi secara otomatis:"
 echo "1. Buka pengaturan MCP klien AI Anda."
 echo "2. Tambahkan server baru dengan konfigurasi berikut:"
 echo "   - Name    : nvstudio-mcp"
-echo "   - Command : node"
-echo "   - Args    : [\"$INSTALL_DIR/dist/index.js\"]"
-echo "================================================================="
-echo "Jangan lupa izinkan 'HTTP Requests' di Game Settings Roblox Studio!"
+echo "   - Command : npx"
+echo "   - Args    : [\"-y\", \"@adiholick/nvstudio-mcp@latest\"]"
+echo -e "${CYAN}=================================================================${NC}"
+echo -e "${YELLOW}Jangan lupa izinkan 'HTTP Requests' di Game Settings Roblox Studio!${NC}"

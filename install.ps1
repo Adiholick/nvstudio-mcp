@@ -82,10 +82,9 @@ if (Test-Path $CursorDir) {
         if (-not $Config.ContainsKey("mcpServers")) {
             $Config["mcpServers"] = @{}
         }
-        $IndexPath = (Join-Path $InstallDir "dist\index.js").Replace("\", "/")
         $Config["mcpServers"]["nvstudio-mcp"] = @{
-            "command" = "node";
-            "args" = @($IndexPath)
+            "command" = "npx";
+            "args" = @("-y", "@adiholick/nvstudio-mcp@latest")
         }
         $Config | ConvertTo-Json -Depth 10 | Set-Content $CursorMcp -Encoding UTF8
         Write-Host "✅ Berhasil menginjeksi konfigurasi ke .cursor/mcp.json" -ForegroundColor Green
@@ -102,8 +101,7 @@ Write-Host "Untuk menghubungkan AI yang tidak terdeteksi secara otomatis:"
 Write-Host "1. Buka pengaturan MCP klien AI Anda."
 Write-Host "2. Tambahkan server baru dengan konfigurasi berikut:"
 Write-Host "   - Name    : nvstudio-mcp"
-Write-Host "   - Command : node"
-$FinalPath = (Join-Path $InstallDir "dist\index.js").Replace("\", "/")
-Write-Host "   - Args    : [`"$FinalPath`"]"
+Write-Host "   - Command : npx"
+Write-Host "   - Args    : [`"-y`", `"@adiholick/nvstudio-mcp@latest`"]"
 Write-Host "=================================================================" -ForegroundColor Cyan
 Write-Host "Jangan lupa izinkan 'HTTP Requests' di Game Settings Roblox Studio!" -ForegroundColor Yellow
