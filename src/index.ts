@@ -67,49 +67,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-// Daftar root service umum yang bukan merupakan script spesifik
-const TOP_LEVEL_SERVICES = new Set([
-  "game",
-  "workspace",
-  "replicatedstorage",
-  "replicatedfirst",
-  "serverscriptservice",
-  "serverstorage",
-  "startergui",
-  "starterpack",
-  "starterplayer",
-  "starterplayerscripts",
-  "startercharacterscripts",
-  "lighting",
-  "soundservice",
-  "players",
-]);
 
-function isSpecificScriptTarget(target: string): boolean {
-  if (!target || typeof target !== "string") {
-    return false;
-  }
-
-  const cleanTarget = target.trim();
-  const parts = cleanTarget.split(".").filter((p) => p.length > 0);
-
-  // Jika hanya berupa satu kata (misal "Workspace") atau dimulai dengan game lalu hanya 1 level service
-  if (parts.length <= 1) {
-    return false;
-  }
-
-  if (parts[0].toLowerCase() === "game" && parts.length <= 2) {
-    return false;
-  }
-
-  // Jika target persis nama top-level service
-  const lastPart = parts[parts.length - 1].toLowerCase();
-  if (TOP_LEVEL_SERVICES.has(lastPart) && parts.length <= 2) {
-    return false;
-  }
-
-  return true;
-}
 
 // 5. Handler untuk menangani pemanggilan call_mcp_tool
 server.setRequestHandler(CallToolRequestSchema, async (request) => {

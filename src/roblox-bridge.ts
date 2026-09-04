@@ -2,14 +2,15 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
-import { taskQueue, pendingTasks } from './task-queue';
+import { taskQueue, pendingTasks, resolvePendingTask } from './task-queue';
 
 export function startBridgeServer(port: number = 3055) {
     const app = express();
     const httpServer = createServer(app);
     const io = new Server(httpServer, { cors: { origin: "*" } });
 
-    app.use(express.json());
+    // FIX: Menaikkan limit ke 50mb agar file .Source (Lua) yang besar tidak melempar error 413 Payload Too Large
+    app.use(express.json({ limit: '50mb' }));
     app.use(express.static(path.join(process.cwd(), 'public')));
 
     // Endpoint Studio Polling
@@ -30,9 +31,8 @@ export function startBridgeServer(port: number = 3055) {
         io.emit('log', `[Studio Response] Status: ${status}`);
         if (error) io.emit('log', `[Error] ${error}`);
 
-        import('./task-queue').then(({ resolvePendingTask }) => {
-            resolvePendingTask(id, status, result, error);
-        });
+        // Memanggil fungsi resolve secara sinkron (menghindari promise import circular palsu)
+        resolvePendingTask(id, status, result, error);
         
         res.json({ message: "Response diterima" });
     });
