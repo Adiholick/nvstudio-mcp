@@ -49,7 +49,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             command: {
               type: "string",
-              description: "Perintah yang akan dieksekusi (contoh: 'get_children', 'get_script_source', 'update_script_source', 'rollback_script').",
+              description: "Perintah yang akan dieksekusi (contoh: 'get_children', 'get_script_source', 'update_script_source', 'rollback_script', 'get_logs').",
             },
             target: {
               type: "string",

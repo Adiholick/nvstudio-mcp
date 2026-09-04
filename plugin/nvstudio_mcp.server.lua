@@ -4,6 +4,27 @@ local RESPONSE_URL = "http://localhost:3000/api/response"
 
 local scriptHistory = {} -- Menyimpan riwayat rollback untuk target
 
+local LogService = game:GetService("LogService")
+local recentLogs = {}
+local MAX_LOGS = 50
+
+-- Menangkap setiap pesan yang muncul di Output Studio
+LogService.MessageOut:Connect(function(message, messageType)
+    local prefix = "[INFO] "
+    if messageType == Enum.MessageType.MessageError then
+        prefix = "[ERROR] "
+    elseif messageType == Enum.MessageType.MessageWarning then
+        prefix = "[WARNING] "
+    end
+    
+    table.insert(recentLogs, prefix .. message)
+    
+    -- Jaga agar memori tidak penuh (maksimal 50 log terbaru)
+    if #recentLogs > MAX_LOGS then
+        table.remove(recentLogs, 1)
+    end
+end)
+
 -- Fungsi untuk mengurai path string (contoh: "Workspace.Map.Part") menjadi Instance
 local function getInstanceFromPath(path)
     local parts = string.split(path, ".")
@@ -82,6 +103,13 @@ local function processTask(taskData)
             end
         else
             return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
+        end
+        
+    elseif command == "get_logs" then
+        if #recentLogs == 0 then
+            return { status = "success", result = {"Console kosong. Tidak ada error atau log terbaru."} }
+        else
+            return { status = "success", result = recentLogs }
         end
         
     elseif command == "search_instance" then

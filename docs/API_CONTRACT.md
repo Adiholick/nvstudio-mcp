@@ -53,3 +53,7 @@ Parser plugin wajib mendukung 3 perintah dasar ini:
    - **Fungsi:** Mengembalikan properti `Source` pada target ke versi sebelumnya jika AI berhalusinasi atau AST Validation gagal.
    - **Parameter target:** Path absolut instance.
    - **Parameter data:** Kosongkan.
+7. `get_logs`:
+   - **Fungsi:** Mengambil 50 baris terakhir dari Output Console Roblox Studio. Sangat penting digunakan setelah memodifikasi script untuk memastikan tidak ada runtime error.
+   - **Parameter target:** `"game"`
+   - **Parameter data:** Kosongkan.
