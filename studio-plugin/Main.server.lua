@@ -188,7 +188,9 @@ function startPolling()
     task.spawn(function()
         while isConnected do
             local success, response = pcall(function()
-                return HttpService:GetAsync(TASK_URL)
+                -- Tambahkan cache-buster agar Studio tidak me-cache response HTTP
+                local cacheBuster = "?t=" .. tostring(os.clock())
+                return HttpService:GetAsync(TASK_URL .. cacheBuster)
             end)
 
             -- PENTING: Cek ulang isConnected SETELAH HTTP request selesai.
