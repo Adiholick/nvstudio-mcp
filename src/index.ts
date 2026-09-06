@@ -9,6 +9,7 @@ import { startBridgeServer } from "./roblox-bridge";
 import { addTaskToQueue } from "./task-queue";
 import fs from 'fs';
 import path from 'path';
+import { validateLuauSyntax } from './luau-validator';
 
 const HISTORY_DIR = path.join(process.cwd(), '.history');
 if (!fs.existsSync(HISTORY_DIR)) {
@@ -29,7 +30,7 @@ startBridgeServer(3055);
 const server = new Server(
   {
     name: "nvstudio-mcp",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   {
     capabilities: {
@@ -44,21 +45,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "call_mcp_tool",
-        description: "ALAT MUTLAK UNTUK ROBLOX. DILARANG KERAS menggunakan PowerShell atau skrip bypass (fetch_mcp_source.js). WAJIB memanggil 'get_children' terlebih dahulu sebelum 'get_script_source'. Command: get_children, get_script_source, update_script_source, rollback_script, get_logs, create_instance, search_instance, generate_terrain, insert_asset, delete_instance, get_properties, script_grep, execute_luau, search_asset.",
+        description: "ALAT MUTLAK UNTUK ROBLOX. Command: patch_script_source, get_children, get_script_source, update_script_source, rollback_script, get_logs, create_instance, search_instance, generate_terrain, insert_asset, delete_instance, get_properties, script_grep, execute_luau, search_asset.",
         inputSchema: {
           type: "object",
           properties: {
             command: {
               type: "string",
-              description: "Perintah yang akan dieksekusi (contoh: 'get_children', 'get_script_source', 'update_script_source', 'rollback_script', 'get_logs').",
+              description: "Perintah yang dieksekusi (contoh: 'patch_script_source', 'get_script_source', 'update_script_source').",
             },
             target: {
               type: "string",
-              description: "Path absolut dari objek target di Roblox Studio (contoh: 'Workspace.Map.Script' atau 'ServerScriptService.MainModule').",
+              description: "Path absolut dari objek target di Roblox Studio (contoh: 'Workspace.Map.Script').",
             },
             data: {
               type: "string",
-              description: "Data tambahan opsional, misalnya isi source code baru saat menjalankan perintah 'update_script_source'.",
+              description: "Data tambahan (misal payload JSON untuk patch_script_source, atau source code penuh untuk update_script_source).",
             },
           },
           required: ["command", "target"],
@@ -67,8 +68,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     ],
   };
 });
-
-
 
 // 5. Handler untuk menangani pemanggilan call_mcp_tool
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -99,22 +98,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  // 6. 🔴 GUARDRAIL MUTLAK: Cegah tebakan path buta
-  if (command === "get_script_source") {
-    const genericTargets = ["Workspace", "ServerScriptService", "ReplicatedStorage", "StarterGui", "StarterPack", "game"];
-    
-    if (genericTargets.includes(target) || !target.includes(".")) {
-      return { 
-        content: [{ 
-          type: "text", 
-          text: "🔴 SERVER GUARDRAIL BLOCKED: DILARANG mengekstrak kode secara buta dari direktori utama atau target yang tidak spesifik. Anda WAJIB memanggil perintah 'get_children' pada '" + target + "' terlebih dahulu untuk memverifikasi nama dan ClassName (Pastikan target adalah LuaSourceContainer)." 
-        }],
-        isError: true
-      };
-    }
+  // Pre-commit validation for full source replacement
+  if (command === "update_script_source" && data) {
+      const validation = validateLuauSyntax(String(data));
+      if (!validation.valid) {
+          return {
+              content: [{
+                  type: "text",
+                  text: JSON.stringify({
+                      status: "error",
+                      error: `Syntax error terdeteksi (Pre-commit check Node.js): ${validation.error} pada baris ${validation.line || 'unknown'}`
+                  })
+              }],
+              isError: true
+          };
+      }
+      backupScript(target, String(data));
   }
 
-  // 7. Intercept command yang dieksekusi di server lokal (Node.js) alih-alih di Studio
+  // Intercept command yang dieksekusi di server lokal (Node.js) alih-alih di Studio
   if (command === "search_asset" && data) {
     try {
       const queryParams = typeof data === "string" ? JSON.parse(data) : data;

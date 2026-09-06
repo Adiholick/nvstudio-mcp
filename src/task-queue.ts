@@ -13,8 +13,11 @@ export interface PendingTask {
   timer: NodeJS.Timeout;
 }
 
+import { EventEmitter } from "events";
+
 // 1. Array untuk menampung antrean tugas (task queue)
 export const taskQueue: Task[] = [];
+export const taskEmitter = new EventEmitter();
 
 // 2. Map untuk menyimpan Promise dari tugas yang sedang menunggu (pending tasks)
 export const pendingTasks = new Map<string, PendingTask>();
@@ -41,6 +44,7 @@ export function addTaskToQueue(
 
     pendingTasks.set(id, { resolve, reject, timer });
     taskQueue.push(task);
+    taskEmitter.emit('new_task');
   });
 }
 

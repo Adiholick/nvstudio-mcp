@@ -128,6 +128,15 @@ local function getInstanceFromPath(pathString)
     
     if parts[1] == "game" then table.remove(parts, 1) end
     
+    -- Handle common Services directly to ensure reliability
+    pcall(function()
+        local svc = game:GetService(parts[1])
+        if svc then
+            current = svc
+            table.remove(parts, 1)
+        end
+    end)
+    
     for _, part in ipairs(parts) do
         local found = current:FindFirstChild(part)
         if not found then return nil end
@@ -198,8 +207,6 @@ function startPolling()
             end)
 
             -- PENTING: Cek ulang isConnected SETELAH HTTP request selesai.
-            -- Jika user menekan Disconnect saat request sedang berjalan,
-            -- kita TIDAK boleh menimpa status UI "disconnected" yang sudah di-set.
             if not isConnected then
                 break
             end
@@ -221,16 +228,20 @@ function startPolling()
                         end)
                     end
                 end
+                
+                -- Fast-polling (long-polling yield di server Node.js)
+                -- 50ms untuk safety mencegah Studio Engine freeze jika Node.js membalas instant
+                task.wait(0.05)
             else
                 -- Fetch gagal (Node.js server mati karena IDE/Antigravity/Cursor ditutup)
                 if ui then ui:setStatus("waiting") end
+                task.wait(1)
             end
             
             -- Cek lagi sebelum sleep (agar disconnect lebih responsif)
             if not isConnected then
                 break
             end
-            task.wait(1)
         end
         isPolling = false
     end)

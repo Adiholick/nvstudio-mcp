@@ -10,8 +10,374 @@
 			<int64 name="SourceAssetId">-1</int64>
 			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 		</Properties>
-		<Item class="Script" referent="RBX749E4D5306E74B7C8E355593066F1D2B">
+		<Item class="ModuleScript" referent="RBX_create_instance">
 			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">create_instance</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    local success, config = pcall(function() return ctx.HttpService:JSONDecode(data) end)
+    if not success or not config.ClassName then
+        return { status = "error", error = "Format data JSON tidak valid atau ClassName hilang." }
+    end
+    
+    local newSuccess, newInst = pcall(function()
+        local inst = Instance.new(config.ClassName)
+        inst.Parent = targetInstance
+        
+        if config.Properties then
+            for prop, val in pairs(config.Properties) do
+                pcall(function() inst[prop] = val end)
+            end
+        end
+        return inst
+    end)
+    
+    if newSuccess then
+        return { status = "success", result = "Instance '"..config.ClassName.."' berhasil dibuat di " .. targetPath }
+    else
+        return { status = "error", error = "Gagal membuat Instance. Pastikan ClassName valid." }
+    end
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_delete_instance">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">delete_instance</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    -- Guardrail: Cegah penghapusan Service utama
+    local protectedServices = {
+        "Workspace", "Players", "Lighting", "MaterialService", "NetworkClient", 
+        "ReplicatedFirst", "ReplicatedStorage", "ServerScriptService", "ServerStorage", 
+        "StarterGui", "StarterPack", "StarterPlayer", "Teams", "SoundService", "Chat", 
+        "TextChatService", "VoiceChatService"
+    }
+    
+    if targetInstance.Parent == game or targetInstance.Parent == nil then
+        for _, serviceName in ipairs(protectedServices) do
+            if targetInstance.Name == serviceName or targetInstance.ClassName == serviceName then
+                return { status = "error", error = "GUARDRAIL BLOCKED: Anda tidak diizinkan untuk menghapus layanan tingkat atas (" .. targetInstance.Name .. ")." }
+            end
+        end
+    end
+    
+    local name = targetInstance.Name
+    local className = targetInstance.ClassName
+    local parentName = targetInstance.Parent and targetInstance.Parent.Name or "nil"
+    
+    local success, err = pcall(function()
+        targetInstance:Destroy()
+    end)
+    
+    if success then
+        return { status = "success", result = "Instance '" .. name .. "' (" .. className .. ") berhasil dihapus dari " .. parentName .. "." }
+    else
+        return { status = "error", error = "Gagal menghapus instance: " .. tostring(err) }
+    end
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_execute_luau">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">execute_luau</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    local code = data
+    if not code or code == "" then
+        return { status = "error", error = "Kode yang dieksekusi tidak boleh kosong." }
+    end
+    
+    local HttpService = game:GetService("HttpService")
+    
+    -- Bungkus code ke dalam fungsi return
+    local wrappedCode = "return function()\n" .. code .. "\nend"
+    
+    local moduleScript = Instance.new("ModuleScript")
+    moduleScript.Name = "AI_Execute_Temp"
+    moduleScript.Source = wrappedCode
+    
+    -- Taruh di ReplicatedStorage sementara agar bisa di-require
+    moduleScript.Parent = game:GetService("ReplicatedStorage")
+    
+    local resultData = nil
+    local execError = nil
+    local isFinished = false
+    
+    -- Eksekusi asinkron dengan batas waktu (timeout) 5 detik
+    task.spawn(function()
+        local reqSuccess, func = pcall(function() return require(moduleScript) end)
+        if reqSuccess and type(func) == "function" then
+            local execSuccess, res = pcall(func)
+            if execSuccess then
+                resultData = res
+            else
+                execError = "Runtime Error: " .. tostring(res)
+            end
+        else
+            execError = "Syntax/Require Error: " .. tostring(func)
+        end
+        isFinished = true
+    end)
+    
+    -- Tunggu hingga 5 detik
+    local timeWaited = 0
+    while not isFinished and timeWaited < 5 do
+        timeWaited = timeWaited + task.wait()
+    end
+    
+    -- Pembersihan (Wajib dihancurkan)
+    pcall(function() moduleScript:Destroy() end)
+    
+    if not isFinished then
+        return { status = "error", error = "Timeout 5 detik terlampaui. Kemungkinan ada infinite loop tanpa task.wait()." }
+    end
+    
+    if execError then
+        return { status = "error", error = execError }
+    end
+    
+    -- Cegah return nil error
+    if resultData == nil then
+        return { status = "success", result = "Eksekusi berhasil (Tidak ada nilai kembalian)." }
+    end
+    
+    -- JSON Encode untuk mencegah raw Instance return crash
+    local serializeSuccess, jsonRes = pcall(function()
+        return HttpService:JSONEncode(resultData)
+    end)
+    
+    if serializeSuccess then
+        return { status = "success", result = HttpService:JSONDecode(jsonRes) } -- decode kembali agar format aslinya diteruskan oleh router
+    else
+        return { status = "error", error = "Gagal menserialisasi hasil (Dilarang mengembalikan raw Roblox Instance): " .. tostring(jsonRes) }
+    end
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_generate_terrain">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">generate_terrain</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    local success, config = pcall(function() return ctx.HttpService:JSONDecode(data) end)
+    if not success or not config.Size or not config.Position or not config.Material then
+        return { status = "error", error = "Format JSON tidak valid. Membutuhkan Size, Position, dan Material." }
+    end
+    
+    local fillSuccess, err = pcall(function()
+        local terrain = game.Workspace.Terrain
+        local materialEnum = Enum.Material[config.Material] or Enum.Material.Grass
+        
+        local size = Vector3.new(config.Size[1], config.Size[2], config.Size[3])
+        local position = Vector3.new(config.Position[1], config.Position[2], config.Position[3])
+        
+        local region = Region3.new(position - (size/2), position + (size/2))
+        terrain:FillRegion(region:ExpandToGrid(4), 4, materialEnum)
+    end)
+    
+    if fillSuccess then
+        return { status = "success", result = "Terrain (" .. config.Material .. ") berhasil di-generate." }
+    else
+        return { status = "error", error = "Gagal men-generate Terrain. Pastikan tipe data array angka valid: " .. tostring(err) }
+    end
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_get_children">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">get_children</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    local children = {}
+    for _, child in ipairs(targetInstance:GetChildren()) do
+        table.insert(children, child.Name .. " (" .. child.ClassName .. ")")
+    end
+    return { status = "success", result = children }
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_get_logs">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">get_logs</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    if #ctx.recentLogs == 0 then
+        return { status = "success", result = {"Console kosong. Tidak ada error atau log terbaru."} }
+    else
+        return { status = "success", result = ctx.recentLogs }
+    end
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_get_properties">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">get_properties</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    local CollectionService = game:GetService("CollectionService")
+    
+    local props = {
+        Name = targetInstance.Name,
+        ClassName = targetInstance.ClassName,
+        Parent = targetInstance.Parent and targetInstance.Parent.Name or "nil",
+    }
+    
+    -- Ambil Properties Umum secara aman via pcall
+    local function tryProp(propName)
+        local success, val = pcall(function() return targetInstance[propName] end)
+        if success and val ~= nil then
+            if typeof(val) == "Vector3" then
+                props[propName] = {math.round(val.X*100)/100, math.round(val.Y*100)/100, math.round(val.Z*100)/100}
+            elseif typeof(val) == "Color3" then
+                props[propName] = {math.round(val.R * 255), math.round(val.G * 255), math.round(val.B * 255)}
+            elseif typeof(val) == "CFrame" then
+                props[propName] = tostring(val)
+            elseif typeof(val) == "EnumItem" then
+                props[propName] = val.Name
+            elseif typeof(val) == "UDim2" then
+                props[propName] = {val.X.Scale, val.X.Offset, val.Y.Scale, val.Y.Offset}
+            elseif typeof(val) == "Instance" then
+                props[propName] = val:GetFullName()
+            else
+                props[propName] = val
+            end
+        end
+    end
+    
+    local commonProps = {
+        "Anchored", "CanCollide", "Transparency", "Reflectance", 
+        "Position", "Size", "Color", "Material", "Text", "TextColor3", 
+        "BackgroundTransparency", "BackgroundColor3", "Visible", "Enabled",
+        "Volume", "Playing", "Looped", "Value"
+    }
+    
+    for _, prop in ipairs(commonProps) do
+        tryProp(prop)
+    end
+    
+    -- Attributes & Tags
+    pcall(function()
+        props.Attributes = targetInstance:GetAttributes()
+    end)
+    pcall(function()
+        props.Tags = CollectionService:GetTags(targetInstance)
+    end)
+    
+    return { status = "success", result = props }
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_get_script_source">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">get_script_source</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    if targetInstance:IsA("LuaSourceContainer") then
+        return { status = "success", result = targetInstance.Source }
+    else
+        return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. "). Kamu WAJIB menggunakan get_children terlebih dahulu sebelum menarik source." }
+    end
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_insert_asset">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">insert_asset</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    local InsertService = game:GetService("InsertService")
+    local assetId = tonumber(data)
+    if not assetId then
+        return { status = "error", error = "Asset ID harus berupa angka yang valid." }
+    end
+    
+    local success, model = pcall(function()
+        return InsertService:LoadAsset(assetId)
+    end)
+    
+    if success and model then
+        model.Parent = game.Workspace
+        return { status = "success", result = "Aset berhasil dimasukkan ke Workspace." }
+    else
+        return { status = "error", error = "Gagal memuat aset. Pastikan Asset ID benar dan akun/plugin Anda memiliki izin (Ownership/Public)." }
+    end
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="Script" referent="RBX_Main_server">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">Main.server</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<token name="RunContext">0</token>
 				<ProtectedString name="Source"><![CDATA[local HttpService = game:GetService("HttpService")
 local LogService = game:GetService("LogService")
 
@@ -31,10 +397,10 @@ local toggleBtn = toolbar:CreateButton("Dashboard", "Buka Dashboard NVStudio MCP
 
 -- Global State & Context AI
 local ctx = {
-	scriptHistory = {},
-	recentLogs = {},
-	HttpService = HttpService,
-	studioId = STUDIO_ID
+    scriptHistory = {},
+    recentLogs = {},
+    HttpService = HttpService,
+    studioId = STUDIO_ID
 }
 local MAX_LOGS = 50
 local isConnected = false
@@ -48,80 +414,80 @@ local stopPolling
 
 -- Inisialisasi UI jika modul ditemukan
 if uiModule then
-	local UIManager = require(uiModule)
-	ui = UIManager.init(plugin, STUDIO_ID)
-
-	-- Sync Initial State ke UI
-	ui:setAutoConnectState(autoConnect)
-	ui:setStatus("disconnected")
-
-	-- Event Toggle GUI Panel
-	toggleBtn.Click:Connect(function()
-		ui:toggleVisibility()
-	end)
-
-	-- Event Tombol Connect (dengan debounce untuk mencegah double-click)
-	ui.connectBtn.MouseButton1Click:Connect(function()
-		if isClickDebounce then return end
-		isClickDebounce = true
-
-		if not isConnected then
-			-- CONNECT (manual) — reset manual disconnect flag agar auto-detect bisa bekerja
-			isManualDisconnect = false
-			isConnected = true
-			ui:setStatus("waiting")
-			ui:addLog("[System] Koneksi manual dimulai. Mencari AI Server (Waiting)...", Color3.fromRGB(255, 220, 100))
-			startPolling()
-		else
-			-- DISCONNECT — hentikan polling dan tandai manual disconnect
-			stopPolling()
-			ui:setStatus("disconnected")
-			ui:addLog("[System] Koneksi dihentikan oleh pengguna.", Color3.fromRGB(255, 100, 100))
-		end
-
-		task.delay(0.3, function()
-			isClickDebounce = false
-		end)
-	end)
-
-	-- Event Custom Checkbox (Auto-Connect)
-	ui.autoConnectBtn.MouseButton1Click:Connect(function()
-		autoConnect = not autoConnect
-		plugin:SetSetting("AutoConnect", autoConnect)
-		ui:setAutoConnectState(autoConnect)
-		ui:addLog("[System] Preferensi Auto-Connect disimpan: " .. tostring(autoConnect), Color3.fromRGB(200, 200, 255))
-	end)
+    local UIManager = require(uiModule)
+    ui = UIManager.init(plugin, STUDIO_ID)
+    
+    -- Sync Initial State ke UI
+    ui:setAutoConnectState(autoConnect)
+    ui:setStatus("disconnected")
+    
+    -- Event Toggle GUI Panel
+    toggleBtn.Click:Connect(function()
+        ui:toggleVisibility()
+    end)
+    
+    -- Event Tombol Connect (dengan debounce untuk mencegah double-click)
+    ui.connectBtn.MouseButton1Click:Connect(function()
+        if isClickDebounce then return end
+        isClickDebounce = true
+        
+        if not isConnected then
+            -- CONNECT (manual) — reset manual disconnect flag agar auto-detect bisa bekerja
+            isManualDisconnect = false
+            isConnected = true
+            ui:setStatus("waiting")
+            ui:addLog("[System] Koneksi manual dimulai. Mencari AI Server (Waiting)...", Color3.fromRGB(255, 220, 100))
+            startPolling()
+        else
+            -- DISCONNECT — hentikan polling dan tandai manual disconnect
+            stopPolling()
+            ui:setStatus("disconnected")
+            ui:addLog("[System] Koneksi dihentikan oleh pengguna.", Color3.fromRGB(255, 100, 100))
+        end
+        
+        task.delay(0.3, function()
+            isClickDebounce = false
+        end)
+    end)
+    
+    -- Event Custom Checkbox (Auto-Connect)
+    ui.autoConnectBtn.MouseButton1Click:Connect(function()
+        autoConnect = not autoConnect
+        plugin:SetSetting("AutoConnect", autoConnect)
+        ui:setAutoConnectState(autoConnect)
+        ui:addLog("[System] Preferensi Auto-Connect disimpan: " .. tostring(autoConnect), Color3.fromRGB(200, 200, 255))
+    end)
 else
-	-- Fallback aman jika pengguna lupa meng-copy ui_manager.lua
-	toggleBtn.Click:Connect(function()
-		print("[NVStudio MCP] ERROR: Modul 'ui_manager' tidak ditemukan di dalam Folder. GUI Gagal dimuat!")
-	end)
+    -- Fallback aman jika pengguna lupa meng-copy ui_manager.lua
+    toggleBtn.Click:Connect(function()
+        print("[NVStudio MCP] ERROR: Modul 'ui_manager' tidak ditemukan di dalam Folder. GUI Gagal dimuat!")
+    end)
 end
 
 -- Handler Output Studio (Untuk AI dan GUI)
 local function addSystemLog(msg, msgType)
-	local color = Color3.fromRGB(200, 200, 200)
-	local prefix = "[INFO] "
-	if msgType == Enum.MessageType.MessageError then
-		prefix = "[ERROR] "
-		color = Color3.fromRGB(255, 100, 100)
-	elseif msgType == Enum.MessageType.MessageWarning then
-		prefix = "[WARN] "
-		color = Color3.fromRGB(255, 200, 100)
-	end
-
-	local fullMsg = prefix .. msg
-
-	-- 1. Simpan di memori untuk disedot AI
-	table.insert(ctx.recentLogs, fullMsg)
-	if #ctx.recentLogs > MAX_LOGS then
-		table.remove(ctx.recentLogs, 1)
-	end
-
-	-- 2. Cetak ke Terminal GUI Plugin
-	if ui then
-		ui:addLog(fullMsg, color)
-	end
+    local color = Color3.fromRGB(200, 200, 200)
+    local prefix = "[INFO] "
+    if msgType == Enum.MessageType.MessageError then
+        prefix = "[ERROR] "
+        color = Color3.fromRGB(255, 100, 100)
+    elseif msgType == Enum.MessageType.MessageWarning then
+        prefix = "[WARN] "
+        color = Color3.fromRGB(255, 200, 100)
+    end
+    
+    local fullMsg = prefix .. msg
+    
+    -- 1. Simpan di memori untuk disedot AI
+    table.insert(ctx.recentLogs, fullMsg)
+    if #ctx.recentLogs > MAX_LOGS then
+        table.remove(ctx.recentLogs, 1)
+    end
+    
+    -- 2. Cetak ke Terminal GUI Plugin
+    if ui then
+        ui:addLog(fullMsg, color)
+    end
 end
 
 -- Ikat listener output
@@ -130,124 +496,135 @@ LogService.MessageOut:Connect(addSystemLog)
 -- Memuat semua module skills secara dinamis
 local skills = {}
 for _, module in ipairs(script.Parent:GetChildren()) do
-	if module:IsA("ModuleScript") and module.Name ~= "ui_manager" then
-		skills[module.Name] = require(module)
-	end
+    if module:IsA("ModuleScript") and module.Name ~= "ui_manager" then
+        skills[module.Name] = require(module)
+    end
 end
 
 -- Fungsi Helper Pathing
 local function getInstanceFromPath(pathString)
-	local parts = string.split(pathString, ".")
-	local current = game
-
-	if parts[1] == "game" then table.remove(parts, 1) end
-
-	for _, part in ipairs(parts) do
-		local found = current:FindFirstChild(part)
-		if not found then return nil end
-		current = found
-	end
-	return current
+    local parts = string.split(pathString, ".")
+    local current = game
+    
+    if parts[1] == "game" then table.remove(parts, 1) end
+    
+    -- Handle common Services directly to ensure reliability
+    pcall(function()
+        local svc = game:GetService(parts[1])
+        if svc then
+            current = svc
+            table.remove(parts, 1)
+        end
+    end)
+    
+    for _, part in ipairs(parts) do
+        local found = current:FindFirstChild(part)
+        if not found then return nil end
+        current = found
+    end
+    return current
 end
 
 -- Memproses Task Eksekusi dari AI
 local function processTask(taskData)
-	if not taskData or not taskData.id or not taskData.command then return nil end
+    if not taskData or not taskData.id or not taskData.command then return nil end
+    
+    if ui then 
+        ui:addLog("[AI Command] Menerima instruksi: " .. taskData.command, Color3.fromRGB(150, 200, 255)) 
+    end
+    
+    local targetInstance = getInstanceFromPath(taskData.target)
+    if not targetInstance then
+        return {
+            id = taskData.id,
+            status = "error",
+            error = "Target path tidak ditemukan: " .. taskData.target
+        }
+    end
 
-	if ui then 
-		ui:addLog("[AI Command] Menerima instruksi: " .. taskData.command, Color3.fromRGB(150, 200, 255)) 
-	end
+    local skillFunc = skills[taskData.command]
+    if not skillFunc then
+        return {
+            id = taskData.id,
+            status = "error",
+            error = "Command tidak dikenali oleh Studio: " .. taskData.command
+        }
+    end
 
-	local targetInstance = getInstanceFromPath(taskData.target)
-	if not targetInstance then
-		return {
-			id = taskData.id,
-			status = "error",
-			error = "Target path tidak ditemukan: " .. taskData.target
-		}
-	end
-
-	local skillFunc = skills[taskData.command]
-	if not skillFunc then
-		return {
-			id = taskData.id,
-			status = "error",
-			error = "Command tidak dikenali oleh Studio: " .. taskData.command
-		}
-	end
-
-	-- Eksekusi skill AI
-	local result = skillFunc(targetInstance, taskData.data, ctx, taskData.target)
-	result.id = taskData.id
-
-	-- Cetak hasil eksekusi ke Terminal GUI
-	if ui then
-		local color = result.status == "success" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
-		ui:addLog("[AI Result] " .. tostring(result.result or result.error), color)
-	end
-
-	return result
+    -- Eksekusi skill AI
+    local result = skillFunc(targetInstance, taskData.data, ctx, taskData.target)
+    result.id = taskData.id
+    
+    -- Cetak hasil eksekusi ke Terminal GUI
+    if ui then
+        local color = result.status == "success" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+        ui:addLog("[AI Result] " .. tostring(result.result or result.error), color)
+    end
+    
+    return result
 end
 
 -- Menghentikan polling dengan bersih (dipanggil oleh tombol Disconnect)
 local isManualDisconnect = false -- Mencegah auto-reconnect saat user sengaja disconnect
 
 function stopPolling()
-	isConnected = false
-	isManualDisconnect = true
-	-- isPolling akan menjadi false secara otomatis saat loop keluar
+    isConnected = false
+    isManualDisconnect = true
+    -- isPolling akan menjadi false secara otomatis saat loop keluar
 end
 
 -- Background Polling Loop (Dapat dihentikan oleh user)
 function startPolling()
-	if isPolling then return end
-	isPolling = true
+    if isPolling then return end
+    isPolling = true
+    
+    task.spawn(function()
+        while isConnected do
+            local success, response = pcall(function()
+                -- Tambahkan cache-buster agar Studio tidak me-cache response HTTP
+                local cacheBuster = "?t=" .. tostring(os.clock())
+                return HttpService:GetAsync(TASK_URL .. cacheBuster)
+            end)
 
-	task.spawn(function()
-		while isConnected do
-			local success, response = pcall(function()
-				-- Tambahkan cache-buster agar Studio tidak me-cache response HTTP
-				local cacheBuster = "?t=" .. tostring(os.clock())
-				return HttpService:GetAsync(TASK_URL .. cacheBuster)
-			end)
+            -- PENTING: Cek ulang isConnected SETELAH HTTP request selesai.
+            if not isConnected then
+                break
+            end
 
-			-- PENTING: Cek ulang isConnected SETELAH HTTP request selesai.
-			-- Jika user menekan Disconnect saat request sedang berjalan,
-			-- kita TIDAK boleh menimpa status UI "disconnected" yang sudah di-set.
-			if not isConnected then
-				break
-			end
+            if success and response then
+                -- JIKA PING SUKSES, Node.js menyala (IDE / Agen Sedang Terbuka!)
+                if ui then ui:setStatus("connected") end
 
-			if success and response then
-				-- JIKA PING SUKSES, Node.js menyala (IDE / Agen Sedang Terbuka!)
-				if ui then ui:setStatus("connected") end
-
-				local decodeSuccess, taskData = pcall(function()
-					return HttpService:JSONDecode(response)
-				end)
-
-				if decodeSuccess and taskData and taskData.id then
-					local resultData = processTask(taskData)
-					if resultData then
-						pcall(function()
-							local jsonResult = HttpService:JSONEncode(resultData)
-							HttpService:PostAsync(RESPONSE_URL, jsonResult, Enum.HttpContentType.ApplicationJson)
-						end)
-					end
-				end
-			else
-				-- Fetch gagal (Node.js server mati karena IDE/Antigravity/Cursor ditutup)
-				if ui then ui:setStatus("waiting") end
-			end
-
-			-- Cek lagi sebelum sleep (agar disconnect lebih responsif)
-			if not isConnected then
-				break
-			end
-			task.wait(1)
-		end
-		isPolling = false
-	end)
+                local decodeSuccess, taskData = pcall(function()
+                    return HttpService:JSONDecode(response)
+                end)
+                
+                if decodeSuccess and taskData and taskData.id then
+                    local resultData = processTask(taskData)
+                    if resultData then
+                        pcall(function()
+                            local jsonResult = HttpService:JSONEncode(resultData)
+                            HttpService:PostAsync(RESPONSE_URL, jsonResult, Enum.HttpContentType.ApplicationJson)
+                        end)
+                    end
+                end
+                
+                -- Fast-polling (long-polling yield di server Node.js)
+                -- 50ms untuk safety mencegah Studio Engine freeze jika Node.js membalas instant
+                task.wait(0.05)
+            else
+                -- Fetch gagal (Node.js server mati karena IDE/Antigravity/Cursor ditutup)
+                if ui then ui:setStatus("waiting") end
+                task.wait(1)
+            end
+            
+            -- Cek lagi sebelum sleep (agar disconnect lebih responsif)
+            if not isConnected then
+                break
+            end
+        end
+        isPolling = false
+    end)
 end
 
 -- ══════════════════════════════════════════════════════════════════════
@@ -257,1077 +634,783 @@ end
 -- Jika terdeteksi mati → otomatis update status.
 -- ══════════════════════════════════════════════════════════════════════
 task.spawn(function()
-	task.wait(1) -- Tunggu sebentar agar UI siap
-
-	if ui then
-		ui:addLog("[System] Plugin termuat. Auto-detect server MCP aktif...", Color3.fromRGB(200, 200, 200))
-	end
-
-	while true do
-		-- Skip heartbeat jika polling loop sudah aktif (ia sudah menangani semuanya)
-		if not isPolling then
-			local success, errorMsg = pcall(function()
-				local cacheBuster = "?t=" .. tostring(os.clock())
-				return HttpService:GetAsync(TASK_URL .. cacheBuster)
-			end)
-
-			if success then
-				-- Server terdeteksi aktif!
-				if not isConnected and not isManualDisconnect then
-					isConnected = true
-					if ui then
-						ui:setStatus("connected")
-						ui:addLog("[System] Server MCP terdeteksi! Auto-connected.", Color3.fromRGB(100, 255, 100))
-					end
-					startPolling()
-				end
-			else
-				-- Server tidak aktif
-				if isConnected then
-					-- Server baru saja mati (sebelumnya connected) — polling loop juga akan exit
-					isConnected = false
-					if ui then
-						ui:setStatus("waiting")
-						ui:addLog("[System] Server MCP terputus. Menunggu reconnect...", Color3.fromRGB(255, 200, 100))
-					end
-				elseif not isManualDisconnect then
-					if ui then 
-						ui:setStatus("waiting") 
-						-- HANYA print error jika belum terkoneksi, untuk debugging
-						ui:addLog("[Debug] Deteksi gagal: " .. tostring(errorMsg), Color3.fromRGB(150, 150, 150))
-					end
-				end
-			end
-		end
-
-		task.wait(2)
-	end
+    task.wait(1) -- Tunggu sebentar agar UI siap
+    
+    if ui then
+        ui:addLog("[System] Plugin termuat. Auto-detect server MCP aktif...", Color3.fromRGB(200, 200, 200))
+    end
+    
+    while true do
+        -- Skip heartbeat jika polling loop sudah aktif (ia sudah menangani semuanya)
+        if not isPolling then
+            local success, errorMsg = pcall(function()
+                local cacheBuster = "?t=" .. tostring(os.clock())
+                return HttpService:GetAsync(TASK_URL .. cacheBuster)
+            end)
+            
+            if success then
+                -- Server terdeteksi aktif!
+                if not isConnected and not isManualDisconnect then
+                    isConnected = true
+                    if ui then
+                        ui:setStatus("connected")
+                        ui:addLog("[System] Server MCP terdeteksi! Auto-connected.", Color3.fromRGB(100, 255, 100))
+                    end
+                    startPolling()
+                end
+            else
+                -- Server tidak aktif
+                if isConnected then
+                    -- Server baru saja mati (sebelumnya connected) — polling loop juga akan exit
+                    isConnected = false
+                    if ui then
+                        ui:setStatus("waiting")
+                        ui:addLog("[System] Server MCP terputus. Menunggu reconnect...", Color3.fromRGB(255, 200, 100))
+                    end
+                elseif not isManualDisconnect then
+                    if ui then 
+                        ui:setStatus("waiting") 
+                        -- HANYA print error jika belum terkoneksi, untuk debugging
+                        ui:addLog("[Debug] Deteksi gagal: " .. tostring(errorMsg), Color3.fromRGB(150, 150, 150))
+                    end
+                end
+            end
+        end
+        
+        task.wait(2)
+    end
 end)
 ]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_patch_script_source">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
 				<bool name="Disabled">false</bool>
 				<Content name="LinkedSource"><null></null></Content>
-				<token name="RunContext">0</token>
-				<string name="ScriptGuid">{260D8035-CDB9-4D28-83B4-92903E74BA82}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">Main</string>
+				<string name="Name">patch_script_source</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBXF88A8EA0FA1B449280110AA8E425E2C9">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	local success, config = pcall(function() return ctx.HttpService:JSONDecode(data) end)
-	if not success or not config.ClassName then
-		return { status = "error", error = "Format data JSON tidak valid atau ClassName hilang." }
-	end
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[local HttpService = game:GetService("HttpService")
 
-	local newSuccess, newInst = pcall(function()
-		local inst = Instance.new(config.ClassName)
-		inst.Parent = targetInstance
+return function(targetInstance, data, ctx, targetPath)
+    if not targetInstance:IsA("LuaSourceContainer") then
+        return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
+    end
 
-		if config.Properties then
-			for prop, val in pairs(config.Properties) do
-				pcall(function() inst[prop] = val end)
-			end
-		end
-		return inst
-	end)
+    local payload = nil
+    pcall(function()
+        payload = HttpService:JSONDecode(data)
+    end)
 
-	if newSuccess then
-		return { status = "success", result = "Instance '"..config.ClassName.."' berhasil dibuat di " .. targetPath }
-	else
-		return { status = "error", error = "Gagal membuat Instance. Pastikan ClassName valid." }
-	end
+    if not payload then
+        return { status = "error", error = "Payload data harus berupa JSON valid." }
+    end
+
+    local currentSource = targetInstance.Source
+    local newSource = currentSource
+    local affectedLines = 0
+
+    -- Mode 1: Search & Replace Exact Chunk
+    if payload.target_content and payload.replacement_content then
+        local targetContent = payload.target_content
+        local replacementContent = payload.replacement_content
+        local allowMultiple = payload.allow_multiple or false
+
+        -- Escape magic characters for string.gsub if needed, or use string.find manually.
+        -- string.gsub doesn't do plain text replacement directly without escaping.
+        -- We'll write a plain text replace function.
+        
+        local function plainReplace(str, pattern, repl, max)
+            local res = ""
+            local startIdx = 1
+            local count = 0
+            while true do
+                if max and count >= max then break end
+                local findStart, findEnd = string.find(str, pattern, startIdx, true) -- true for plain match
+                if not findStart then break end
+                
+                res = res .. string.sub(str, startIdx, findStart - 1) .. repl
+                startIdx = findEnd + 1
+                count = count + 1
+            end
+            res = res .. string.sub(str, startIdx)
+            return res, count
+        end
+
+        local _, occurrences = plainReplace(currentSource, targetContent, replacementContent)
+        
+        if occurrences == 0 then
+            return { status = "error", error = "target_content tidak ditemukan di dalam script." }
+        elseif occurrences > 1 and not allowMultiple then
+            return { status = "error", error = "target_content ditemukan " .. occurrences .. " kali. Tolong sertakan baris konteks lebih banyak agar unik, atau set allow_multiple = true." }
+        end
+
+        newSource, affectedLines = plainReplace(currentSource, targetContent, replacementContent)
+        affectedLines = affectedLines -- not exact line count, but occurrences count
+    
+    -- Mode 2: Line Range Replace
+    elseif payload.start_line and payload.end_line and payload.replacement_content then
+        local lines = string.split(currentSource, "\n")
+        local startLine = tonumber(payload.start_line)
+        local endLine = tonumber(payload.end_line)
+        
+        if not startLine or not endLine or startLine < 1 or endLine > #lines or startLine > endLine then
+            return { status = "error", error = "Range baris tidak valid. Jumlah baris script: " .. #lines }
+        end
+
+        local newLines = {}
+        for i = 1, startLine - 1 do
+            table.insert(newLines, lines[i])
+        end
+        
+        table.insert(newLines, payload.replacement_content)
+        
+        for i = endLine + 1, #lines do
+            table.insert(newLines, lines[i])
+        end
+        
+        newSource = table.concat(newLines, "\n")
+        affectedLines = (endLine - startLine) + 1
+    else
+        return { status = "error", error = "Payload tidak lengkap. Butuh (target_content & replacement_content) atau (start_line, end_line & replacement_content)." }
+    end
+
+    -- Simpan backup snapshot sebelum mengaplikasikan patch
+    ctx.scriptHistory[targetPath] = currentSource
+
+    -- Terapkan perubahan
+    targetInstance.Source = newSource
+    
+    return { 
+        status = "success", 
+        result = "Patch berhasil diterapkan pada '" .. targetInstance.Name .. "'. Perubahan diaplikasikan.",
+        affected_lines = affectedLines
+    }
 end
 ]]></ProtectedString>
-				<string name="ScriptGuid">{77371DDE-9628-42F5-BFF7-C6B802AB9AC0}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">create_instance</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXA056230ABABC48FFBC66487DC4B83FB2">
+		<Item class="ModuleScript" referent="RBX_rollback_script">
 			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	local success, config = pcall(function() return ctx.HttpService:JSONDecode(data) end)
-	if not success or not config.Size or not config.Position or not config.Material then
-		return { status = "error", error = "Format JSON tidak valid. Membutuhkan Size, Position, dan Material." }
-	end
-
-	local fillSuccess, err = pcall(function()
-		local terrain = game.Workspace.Terrain
-		local materialEnum = Enum.Material[config.Material] or Enum.Material.Grass
-
-		local size = Vector3.new(config.Size[1], config.Size[2], config.Size[3])
-		local position = Vector3.new(config.Position[1], config.Position[2], config.Position[3])
-
-		local region = Region3.new(position - (size/2), position + (size/2))
-		terrain:FillRegion(region:ExpandToGrid(4), 4, materialEnum)
-	end)
-
-	if fillSuccess then
-		return { status = "success", result = "Terrain (" .. config.Material .. ") berhasil di-generate." }
-	else
-		return { status = "error", error = "Gagal men-generate Terrain. Pastikan tipe data array angka valid: " .. tostring(err) }
-	end
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{5D7B3DEA-8687-47A3-97CF-A969DAAF075B}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">generate_terrain</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBX020FB330A8554FAFA0499639D23AB46D">
-			<Properties>
+				<bool name="Disabled">false</bool>
 				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	local children = {}
-	for _, child in ipairs(targetInstance:GetChildren()) do
-		table.insert(children, child.Name .. " (" .. child.ClassName .. ")")
-	end
-	return { status = "success", result = children }
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{52133AC5-2F28-4C9D-A861-C726088A0450}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">get_children</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBX625EEDF3B809470F94D6CA72BD468ED6">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	if #ctx.recentLogs == 0 then
-		return { status = "success", result = {"Console kosong. Tidak ada error atau log terbaru."} }
-	else
-		return { status = "success", result = ctx.recentLogs }
-	end
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{5A11F6E8-8B4E-4561-AF76-62C40C81F0D7}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">get_logs</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBXE5B71E01ACBE4AD0B6DC072381E6F57B">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	if targetInstance:IsA("LuaSourceContainer") then
-		return { status = "success", result = targetInstance.Source }
-	else
-		return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. "). Kamu WAJIB menggunakan get_children terlebih dahulu sebelum menarik source." }
-	end
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{D6848696-9F37-490E-9ADF-634A868F8B0A}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">get_script_source</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBX8A29B2C0C1804D6A9A8C3DEBD337010E">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	local InsertService = game:GetService("InsertService")
-	local assetId = tonumber(data)
-	if not assetId then
-		return { status = "error", error = "Asset ID harus berupa angka yang valid." }
-	end
-
-	local success, model = pcall(function()
-		return InsertService:LoadAsset(assetId)
-	end)
-
-	if success and model then
-		model.Parent = game.Workspace
-		return { status = "success", result = "Aset berhasil dimasukkan ke Workspace." }
-	else
-		return { status = "error", error = "Gagal memuat aset. Pastikan Asset ID benar dan akun/plugin Anda memiliki izin (Ownership/Public)." }
-	end
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{7C5C84D5-FCBE-403F-9679-BF4A782C4A82}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">insert_asset</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBXB2C4DDC5A9A84FC5B6318F52E35AF483">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	if targetInstance:IsA("LuaSourceContainer") then
-		local prevSource = ctx.scriptHistory[targetPath]
-		if prevSource then
-			targetInstance.Source = prevSource
-			return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil di-rollback ke versi sebelumnya." }
-		else
-			return { status = "error", error = "Tidak ada riwayat backup sebelumnya di sesi Studio ini untuk: " .. targetPath }
-		end
-	else
-		return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
-	end
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{C7FD1B40-5FDA-4700-AE2A-201A6D1E282E}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">rollback_script</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBX4A79E3095F604AFEB115D7444BDB20B3">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
+				<SharedString name="Tags"></SharedString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	local searchName = tostring(data)
-	local results = {}
-
-	local searchableServices = {game:GetService("Workspace"), game:GetService("ReplicatedStorage"), game:GetService("ServerScriptService"), game:GetService("StarterGui")}
-
-	for _, service in ipairs(searchableServices) do
-		for _, desc in ipairs(service:GetDescendants()) do
-			if desc.Name == searchName then
-				table.insert(results, desc:GetFullName())
-			end
-		end
-	end
-
-	if #results > 0 then
-		return { status = "success", result = results }
-	else
-		return { status = "success", result = "Tidak ditemukan instance dengan nama: " .. searchName }
-	end
+    if targetInstance:IsA("LuaSourceContainer") then
+        local prevSource = ctx.scriptHistory[targetPath]
+        if prevSource then
+            targetInstance.Source = prevSource
+            return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil di-rollback ke versi sebelumnya." }
+        else
+            return { status = "error", error = "Tidak ada riwayat backup sebelumnya di sesi Studio ini untuk: " .. targetPath }
+        end
+    else
+        return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
+    end
 end
 ]]></ProtectedString>
-				<string name="ScriptGuid">{2A73242D-0CFB-4307-861B-CDAAC6A0B3AD}</string>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_script_grep">
+			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">script_grep</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    local query = tostring(data)
+    if not query or query == "" then
+        return { status = "error", error = "Query pencarian tidak boleh kosong." }
+    end
+
+    local matches = {}
+    local matchCount = 0
+    local MAX_MATCHES = 50
+
+    local searchableServices = {
+        game:GetService("Workspace"),
+        game:GetService("ServerScriptService"),
+        game:GetService("ReplicatedStorage"),
+        game:GetService("StarterPlayer"),
+        game:GetService("StarterGui")
+    }
+
+    local function searchInScript(scriptObj)
+        local success, source = pcall(function() return scriptObj.Source end)
+        if not success or not source then return end
+
+        local lines = string.split(source, "\n")
+        for i, line in ipairs(lines) do
+            -- Coba cari dengan plain text dulu, jika gagal coba pattern
+            local found = string.find(line, query, 1, true)
+            if not found then
+                pcall(function() found = string.find(line, query) end)
+            end
+
+            if found then
+                table.insert(matches, {
+                    script = scriptObj:GetFullName(),
+                    line = i,
+                    content = string.match(line, "^%s*(.-)%s*$") or line
+                })
+                matchCount = matchCount + 1
+                if matchCount >= MAX_MATCHES then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    for _, service in ipairs(searchableServices) do
+        pcall(function()
+            local descendants = service:GetDescendants()
+            for _, desc in ipairs(descendants) do
+                if desc:IsA("LuaSourceContainer") then
+                    if searchInScript(desc) then
+                        break
+                    end
+                end
+            end
+        end)
+        if matchCount >= MAX_MATCHES then
+            break
+        end
+    end
+
+    return { status = "success", matches = matches, count = matchCount, limitReached = (matchCount >= MAX_MATCHES) }
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_search_instance">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">search_instance</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBX543373412A5740FCB6655A9B57FBE9D7">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
+				<SharedString name="Tags"></SharedString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	if targetInstance:IsA("LuaSourceContainer") then
-		local newCode = data or ""
-
-		-- Catatan: Validasi AST menggunakan loadstring() sengaja DIHAPUS.
-		-- Karena secara default Roblox Studio mematikan LoadStringEnabled, menggunakannya 
-		-- hanya akan membuat AI gagal terus menerus untuk menulis script. 
-		-- Error syntax akan ditangkap secara native oleh Roblox Output.
-
-		ctx.scriptHistory[targetPath] = targetInstance.Source
-		targetInstance.Source = newCode
-		return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil diperbarui." }
-	else
-		return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
-	end
+    local searchName = tostring(data)
+    local results = {}
+    
+    local searchableServices = {game:GetService("Workspace"), game:GetService("ReplicatedStorage"), game:GetService("ServerScriptService"), game:GetService("StarterGui")}
+    
+    for _, service in ipairs(searchableServices) do
+        for _, desc in ipairs(service:GetDescendants()) do
+            if desc.Name == searchName then
+                table.insert(results, desc:GetFullName())
+            end
+        end
+    end
+    
+    if #results > 0 then
+        return { status = "success", result = results }
+    else
+        return { status = "success", result = "Tidak ditemukan instance dengan nama: " .. searchName }
+    end
 end
 ]]></ProtectedString>
-				<string name="ScriptGuid">{B2F31812-C6C6-4AF9-8320-95D1E9069768}</string>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_ui_manager">
+			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">update_script_source</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBX67FD07EDDECD4543B003A3628AF30B03">
-			<Properties>
+				<bool name="Disabled">false</bool>
 				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">ui_manager</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
 				<ProtectedString name="Source"><![CDATA[local UIManager = {}
 local widget = nil
 
 function UIManager.init(pluginInstance, studioId)
-	-- Membuat Widget Panel yang bisa di-dock (menempel)
-	local widgetInfo = DockWidgetPluginGuiInfo.new(
-		Enum.InitialDockState.Right,
-		false,  -- Initially hidden until toolbar button is clicked
-		false,  -- Override enabled
-		380,    -- Default width
-		520,    -- Default height
-		280,    -- Min width
-		320     -- Min height
-	)
+    -- Membuat Widget Panel yang bisa di-dock (menempel)
+    local widgetInfo = DockWidgetPluginGuiInfo.new(
+        Enum.InitialDockState.Right,
+        false,  -- Initially hidden until toolbar button is clicked
+        false,  -- Override enabled
+        380,    -- Default width
+        520,    -- Default height
+        280,    -- Min width
+        320     -- Min height
+    )
+    
+    widget = pluginInstance:CreateDockWidgetPluginGui("NVStudioMCP_GUI_V3", widgetInfo)
+    widget.Title = "NVStudio MCP Dashboard"
+    
+    -- ═══════════════════════════════════════════
+    -- ROOT FRAME (Non-scrolling, fills entire widget)
+    -- ═══════════════════════════════════════════
+    local rootFrame = Instance.new("Frame")
+    rootFrame.Size = UDim2.new(1, 0, 1, 0)
+    rootFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    rootFrame.BorderSizePixel = 0
+    rootFrame.Parent = widget
 
-	widget = pluginInstance:CreateDockWidgetPluginGui("NVStudioMCP_GUI_V3", widgetInfo)
-	widget.Title = "NVStudio MCP Dashboard"
+    local rootPadding = Instance.new("UIPadding")
+    rootPadding.PaddingTop = UDim.new(0, 8)
+    rootPadding.PaddingLeft = UDim.new(0, 10)
+    rootPadding.PaddingRight = UDim.new(0, 10)
+    rootPadding.PaddingBottom = UDim.new(0, 8)
+    rootPadding.Parent = rootFrame
 
-	-- ═══════════════════════════════════════════
-	-- ROOT FRAME (Non-scrolling, fills entire widget)
-	-- ═══════════════════════════════════════════
-	local rootFrame = Instance.new("Frame")
-	rootFrame.Size = UDim2.new(1, 0, 1, 0)
-	rootFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
-	rootFrame.BorderSizePixel = 0
-	rootFrame.Parent = widget
+    local rootLayout = Instance.new("UIListLayout")
+    rootLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    rootLayout.Padding = UDim.new(0, 6)
+    rootLayout.Parent = rootFrame
 
-	local rootPadding = Instance.new("UIPadding")
-	rootPadding.PaddingTop = UDim.new(0, 8)
-	rootPadding.PaddingLeft = UDim.new(0, 10)
-	rootPadding.PaddingRight = UDim.new(0, 10)
-	rootPadding.PaddingBottom = UDim.new(0, 8)
-	rootPadding.Parent = rootFrame
+    -- ═══════════════════════════════════════════
+    -- SECTION 1: HEADER CARD
+    -- ═══════════════════════════════════════════
+    local headerFrame = Instance.new("Frame")
+    headerFrame.AutomaticSize = Enum.AutomaticSize.Y
+    headerFrame.Size = UDim2.new(1, 0, 0, 0)
+    headerFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
+    headerFrame.BorderSizePixel = 0
+    headerFrame.LayoutOrder = 1
+    headerFrame.Parent = rootFrame
 
-	local rootLayout = Instance.new("UIListLayout")
-	rootLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	rootLayout.Padding = UDim.new(0, 6)
-	rootLayout.Parent = rootFrame
+    local hCorner = Instance.new("UICorner")
+    hCorner.CornerRadius = UDim.new(0, 6)
+    hCorner.Parent = headerFrame
 
-	-- ═══════════════════════════════════════════
-	-- SECTION 1: HEADER CARD
-	-- ═══════════════════════════════════════════
-	local headerFrame = Instance.new("Frame")
-	headerFrame.AutomaticSize = Enum.AutomaticSize.Y
-	headerFrame.Size = UDim2.new(1, 0, 0, 0)
-	headerFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
-	headerFrame.BorderSizePixel = 0
-	headerFrame.LayoutOrder = 1
-	headerFrame.Parent = rootFrame
+    local hPadding = Instance.new("UIPadding")
+    hPadding.PaddingTop = UDim.new(0, 10)
+    hPadding.PaddingLeft = UDim.new(0, 12)
+    hPadding.PaddingRight = UDim.new(0, 12)
+    hPadding.PaddingBottom = UDim.new(0, 10)
+    hPadding.Parent = headerFrame
 
-	local hCorner = Instance.new("UICorner")
-	hCorner.CornerRadius = UDim.new(0, 6)
-	hCorner.Parent = headerFrame
+    local hLayout = Instance.new("UIListLayout")
+    hLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    hLayout.Padding = UDim.new(0, 2)
+    hLayout.Parent = headerFrame
 
-	local hPadding = Instance.new("UIPadding")
-	hPadding.PaddingTop = UDim.new(0, 10)
-	hPadding.PaddingLeft = UDim.new(0, 12)
-	hPadding.PaddingRight = UDim.new(0, 12)
-	hPadding.PaddingBottom = UDim.new(0, 10)
-	hPadding.Parent = headerFrame
+    -- Title Row (Name + Status side by side)
+    local titleRow = Instance.new("Frame")
+    titleRow.AutomaticSize = Enum.AutomaticSize.Y
+    titleRow.Size = UDim2.new(1, 0, 0, 0)
+    titleRow.BackgroundTransparency = 1
+    titleRow.LayoutOrder = 1
+    titleRow.Parent = headerFrame
 
-	local hLayout = Instance.new("UIListLayout")
-	hLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	hLayout.Padding = UDim.new(0, 2)
-	hLayout.Parent = headerFrame
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Text = "NVStudio MCP"
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 18
+    titleLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Size = UDim2.new(0.6, 0, 0, 22)
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = titleRow
 
-	-- Title Row (Name + Status side by side)
-	local titleRow = Instance.new("Frame")
-	titleRow.AutomaticSize = Enum.AutomaticSize.Y
-	titleRow.Size = UDim2.new(1, 0, 0, 0)
-	titleRow.BackgroundTransparency = 1
-	titleRow.LayoutOrder = 1
-	titleRow.Parent = headerFrame
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Text = "● Disconnected"
+    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.TextSize = 12
+    statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Size = UDim2.new(0.4, 0, 0, 22)
+    statusLabel.Position = UDim2.new(0.6, 0, 0, 0)
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Right
+    statusLabel.Parent = titleRow
 
-	local titleLabel = Instance.new("TextLabel")
-	titleLabel.Text = "NVStudio MCP"
-	titleLabel.Font = Enum.Font.GothamBold
-	titleLabel.TextSize = 18
-	titleLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
-	titleLabel.BackgroundTransparency = 1
-	titleLabel.Size = UDim2.new(0.6, 0, 0, 22)
-	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-	titleLabel.Parent = titleRow
+    -- Version
+    local versionLabel = Instance.new("TextLabel")
+    versionLabel.Text = "v1.2.0 · Hybrid Agent"
+    versionLabel.Font = Enum.Font.Gotham
+    versionLabel.TextSize = 11
+    versionLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
+    versionLabel.BackgroundTransparency = 1
+    versionLabel.Size = UDim2.new(1, 0, 0, 14)
+    versionLabel.TextXAlignment = Enum.TextXAlignment.Left
+    versionLabel.LayoutOrder = 2
+    versionLabel.Parent = headerFrame
 
-	local statusLabel = Instance.new("TextLabel")
-	statusLabel.Text = "● Disconnected"
-	statusLabel.Font = Enum.Font.GothamBold
-	statusLabel.TextSize = 12
-	statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-	statusLabel.BackgroundTransparency = 1
-	statusLabel.Size = UDim2.new(0.4, 0, 0, 22)
-	statusLabel.Position = UDim2.new(0.6, 0, 0, 0)
-	statusLabel.TextXAlignment = Enum.TextXAlignment.Right
-	statusLabel.Parent = titleRow
+    -- Thin separator
+    local sep1 = Instance.new("Frame")
+    sep1.Size = UDim2.new(1, 0, 0, 1)
+    sep1.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
+    sep1.BorderSizePixel = 0
+    sep1.LayoutOrder = 3
+    sep1.Parent = headerFrame
 
-	-- Version
-	local versionLabel = Instance.new("TextLabel")
-	versionLabel.Text = "v1.2.0 · Hybrid Agent"
-	versionLabel.Font = Enum.Font.Gotham
-	versionLabel.TextSize = 11
-	versionLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
-	versionLabel.BackgroundTransparency = 1
-	versionLabel.Size = UDim2.new(1, 0, 0, 14)
-	versionLabel.TextXAlignment = Enum.TextXAlignment.Left
-	versionLabel.LayoutOrder = 2
-	versionLabel.Parent = headerFrame
+    -- Place info
+    local placeLabel = Instance.new("TextLabel")
+    placeLabel.Text = "📁  " .. (game.Name ~= "" and game.Name or "Untitled Baseplate")
+    placeLabel.Font = Enum.Font.Gotham
+    placeLabel.TextSize = 11
+    placeLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+    placeLabel.BackgroundTransparency = 1
+    placeLabel.Size = UDim2.new(1, 0, 0, 16)
+    placeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    placeLabel.LayoutOrder = 4
+    placeLabel.Parent = headerFrame
 
-	-- Thin separator
-	local sep1 = Instance.new("Frame")
-	sep1.Size = UDim2.new(1, 0, 0, 1)
-	sep1.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
-	sep1.BorderSizePixel = 0
-	sep1.LayoutOrder = 3
-	sep1.Parent = headerFrame
+    -- Studio ID
+    local idLabel = Instance.new("TextLabel")
+    idLabel.Text = "🔗  " .. string.sub(tostring(studioId), 1, 18) .. "..."
+    idLabel.Font = Enum.Font.Code
+    idLabel.TextSize = 10
+    idLabel.TextColor3 = Color3.fromRGB(90, 180, 230)
+    idLabel.BackgroundTransparency = 1
+    idLabel.Size = UDim2.new(1, 0, 0, 14)
+    idLabel.TextXAlignment = Enum.TextXAlignment.Left
+    idLabel.LayoutOrder = 5
+    idLabel.Parent = headerFrame
 
-	-- Place info
-	local placeLabel = Instance.new("TextLabel")
-	placeLabel.Text = "📁  " .. (game.Name ~= "" and game.Name or "Untitled Baseplate")
-	placeLabel.Font = Enum.Font.Gotham
-	placeLabel.TextSize = 11
-	placeLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-	placeLabel.BackgroundTransparency = 1
-	placeLabel.Size = UDim2.new(1, 0, 0, 16)
-	placeLabel.TextXAlignment = Enum.TextXAlignment.Left
-	placeLabel.LayoutOrder = 4
-	placeLabel.Parent = headerFrame
+    -- Server URL
+    local serverLabel = Instance.new("TextLabel")
+    serverLabel.Text = "🌐  localhost:3055"
+    serverLabel.Font = Enum.Font.Code
+    serverLabel.TextSize = 10
+    serverLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
+    serverLabel.BackgroundTransparency = 1
+    serverLabel.Size = UDim2.new(1, 0, 0, 14)
+    serverLabel.TextXAlignment = Enum.TextXAlignment.Left
+    serverLabel.LayoutOrder = 6
+    serverLabel.Parent = headerFrame
 
-	-- Studio ID
-	local idLabel = Instance.new("TextLabel")
-	idLabel.Text = "🔗  " .. string.sub(tostring(studioId), 1, 18) .. "..."
-	idLabel.Font = Enum.Font.Code
-	idLabel.TextSize = 10
-	idLabel.TextColor3 = Color3.fromRGB(90, 180, 230)
-	idLabel.BackgroundTransparency = 1
-	idLabel.Size = UDim2.new(1, 0, 0, 14)
-	idLabel.TextXAlignment = Enum.TextXAlignment.Left
-	idLabel.LayoutOrder = 5
-	idLabel.Parent = headerFrame
+    -- ═══════════════════════════════════════════
+    -- SECTION 2: CONTROLS ROW
+    -- ═══════════════════════════════════════════
+    local controlsFrame = Instance.new("Frame")
+    controlsFrame.Size = UDim2.new(1, 0, 0, 32)
+    controlsFrame.BackgroundTransparency = 1
+    controlsFrame.LayoutOrder = 2
+    controlsFrame.Parent = rootFrame
 
-	-- Server URL
-	local serverLabel = Instance.new("TextLabel")
-	serverLabel.Text = "🌐  localhost:3055"
-	serverLabel.Font = Enum.Font.Code
-	serverLabel.TextSize = 10
-	serverLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
-	serverLabel.BackgroundTransparency = 1
-	serverLabel.Size = UDim2.new(1, 0, 0, 14)
-	serverLabel.TextXAlignment = Enum.TextXAlignment.Left
-	serverLabel.LayoutOrder = 6
-	serverLabel.Parent = headerFrame
+    -- Connect / Disconnect Button
+    local connectBtn = Instance.new("TextButton")
+    connectBtn.Size = UDim2.new(0.52, -4, 1, 0)
+    connectBtn.Position = UDim2.new(0, 0, 0, 0)
+    connectBtn.Text = "  Connect"
+    connectBtn.Font = Enum.Font.GothamBold
+    connectBtn.TextSize = 13
+    connectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    connectBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 80)
+    connectBtn.BorderSizePixel = 0
+    connectBtn.AutoButtonColor = false
+    connectBtn.ZIndex = 2
+    connectBtn.Parent = controlsFrame
 
-	-- ═══════════════════════════════════════════
-	-- SECTION 2: CONTROLS ROW
-	-- ═══════════════════════════════════════════
-	local controlsFrame = Instance.new("Frame")
-	controlsFrame.Size = UDim2.new(1, 0, 0, 32)
-	controlsFrame.BackgroundTransparency = 1
-	controlsFrame.LayoutOrder = 2
-	controlsFrame.Parent = rootFrame
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(0, 5)
+    cCorner.Parent = connectBtn
 
-	-- Connect / Disconnect Button
-	local connectBtn = Instance.new("TextButton")
-	connectBtn.Size = UDim2.new(0.52, -4, 1, 0)
-	connectBtn.Position = UDim2.new(0, 0, 0, 0)
-	connectBtn.Text = "  Connect"
-	connectBtn.Font = Enum.Font.GothamBold
-	connectBtn.TextSize = 13
-	connectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	connectBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 80)
-	connectBtn.BorderSizePixel = 0
-	connectBtn.AutoButtonColor = false
-	connectBtn.ZIndex = 2
-	connectBtn.Parent = controlsFrame
+    -- Hover Effects for Connect Button (menggunakan stored base color, bukan text check)
+    local _btnBaseColor = Color3.fromRGB(40, 160, 80)
+    local _isHovering = false
+    
+    connectBtn.MouseEnter:Connect(function()
+        _isHovering = true
+        connectBtn.BackgroundColor3 = Color3.fromRGB(
+            math.min(255, math.floor(_btnBaseColor.R * 255 + 25)),
+            math.min(255, math.floor(_btnBaseColor.G * 255 + 25)),
+            math.min(255, math.floor(_btnBaseColor.B * 255 + 25))
+        )
+    end)
+    connectBtn.MouseLeave:Connect(function()
+        _isHovering = false
+        connectBtn.BackgroundColor3 = _btnBaseColor
+    end)
 
-	local cCorner = Instance.new("UICorner")
-	cCorner.CornerRadius = UDim.new(0, 5)
-	cCorner.Parent = connectBtn
+    -- Auto-Connect Checkbox Container
+    local autoConnectContainer = Instance.new("Frame")
+    autoConnectContainer.Size = UDim2.new(0.48, -4, 1, 0)
+    autoConnectContainer.Position = UDim2.new(0.52, 4, 0, 0)
+    autoConnectContainer.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
+    autoConnectContainer.BorderSizePixel = 0
+    autoConnectContainer.Parent = controlsFrame
 
-	-- Hover Effects for Connect Button (menggunakan stored base color, bukan text check)
-	local _btnBaseColor = Color3.fromRGB(40, 160, 80)
-	local _isHovering = false
+    local acCorner = Instance.new("UICorner")
+    acCorner.CornerRadius = UDim.new(0, 5)
+    acCorner.Parent = autoConnectContainer
 
-	connectBtn.MouseEnter:Connect(function()
-		_isHovering = true
-		connectBtn.BackgroundColor3 = Color3.fromRGB(
-			math.min(255, math.floor(_btnBaseColor.R * 255 + 25)),
-			math.min(255, math.floor(_btnBaseColor.G * 255 + 25)),
-			math.min(255, math.floor(_btnBaseColor.B * 255 + 25))
-		)
-	end)
-	connectBtn.MouseLeave:Connect(function()
-		_isHovering = false
-		connectBtn.BackgroundColor3 = _btnBaseColor
-	end)
+    -- Checkbox visual (outer box)
+    local checkboxOuter = Instance.new("Frame")
+    checkboxOuter.Size = UDim2.new(0, 16, 0, 16)
+    checkboxOuter.Position = UDim2.new(0, 10, 0.5, -8)
+    checkboxOuter.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+    checkboxOuter.BorderSizePixel = 0
+    checkboxOuter.Parent = autoConnectContainer
 
-	-- Auto-Connect Checkbox Container
-	local autoConnectContainer = Instance.new("Frame")
-	autoConnectContainer.Size = UDim2.new(0.48, -4, 1, 0)
-	autoConnectContainer.Position = UDim2.new(0.52, 4, 0, 0)
-	autoConnectContainer.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
-	autoConnectContainer.BorderSizePixel = 0
-	autoConnectContainer.Parent = controlsFrame
+    local cbCorner = Instance.new("UICorner")
+    cbCorner.CornerRadius = UDim.new(0, 3)
+    cbCorner.Parent = checkboxOuter
 
-	local acCorner = Instance.new("UICorner")
-	acCorner.CornerRadius = UDim.new(0, 5)
-	acCorner.Parent = autoConnectContainer
+    local cbStroke = Instance.new("UIStroke")
+    cbStroke.Color = Color3.fromRGB(80, 80, 95)
+    cbStroke.Thickness = 1
+    cbStroke.Parent = checkboxOuter
 
-	-- Checkbox visual (outer box)
-	local checkboxOuter = Instance.new("Frame")
-	checkboxOuter.Size = UDim2.new(0, 16, 0, 16)
-	checkboxOuter.Position = UDim2.new(0, 10, 0.5, -8)
-	checkboxOuter.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-	checkboxOuter.BorderSizePixel = 0
-	checkboxOuter.Parent = autoConnectContainer
+    -- Checkbox inner (check mark)
+    local checkboxInner = Instance.new("Frame")
+    checkboxInner.Size = UDim2.new(0, 10, 0, 10)
+    checkboxInner.Position = UDim2.new(0.5, -5, 0.5, -5)
+    checkboxInner.BackgroundColor3 = Color3.fromRGB(80, 170, 255)
+    checkboxInner.Visible = false
+    checkboxInner.Parent = checkboxOuter
 
-	local cbCorner = Instance.new("UICorner")
-	cbCorner.CornerRadius = UDim.new(0, 3)
-	cbCorner.Parent = checkboxOuter
+    local cbiCorner = Instance.new("UICorner")
+    cbiCorner.CornerRadius = UDim.new(0, 2)
+    cbiCorner.Parent = checkboxInner
 
-	local cbStroke = Instance.new("UIStroke")
-	cbStroke.Color = Color3.fromRGB(80, 80, 95)
-	cbStroke.Thickness = 1
-	cbStroke.Parent = checkboxOuter
+    -- Label
+    local autoConnectLabel = Instance.new("TextLabel")
+    autoConnectLabel.Text = "Auto-Connect"
+    autoConnectLabel.Font = Enum.Font.Gotham
+    autoConnectLabel.TextSize = 11
+    autoConnectLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+    autoConnectLabel.BackgroundTransparency = 1
+    autoConnectLabel.Position = UDim2.new(0, 32, 0, 0)
+    autoConnectLabel.Size = UDim2.new(1, -36, 1, 0)
+    autoConnectLabel.TextXAlignment = Enum.TextXAlignment.Left
+    autoConnectLabel.Parent = autoConnectContainer
 
-	-- Checkbox inner (check mark)
-	local checkboxInner = Instance.new("Frame")
-	checkboxInner.Size = UDim2.new(0, 10, 0, 10)
-	checkboxInner.Position = UDim2.new(0.5, -5, 0.5, -5)
-	checkboxInner.BackgroundColor3 = Color3.fromRGB(80, 170, 255)
-	checkboxInner.Visible = false
-	checkboxInner.Parent = checkboxOuter
+    -- Invisible overlay button for checkbox hit area
+    local autoConnectBtn = Instance.new("TextButton")
+    autoConnectBtn.Size = UDim2.new(1, 0, 1, 0)
+    autoConnectBtn.BackgroundTransparency = 1
+    autoConnectBtn.Text = ""
+    autoConnectBtn.ZIndex = 3 -- Di atas elemen visual agar klik selalu terdeteksi
+    autoConnectBtn.Parent = autoConnectContainer
 
-	local cbiCorner = Instance.new("UICorner")
-	cbiCorner.CornerRadius = UDim.new(0, 2)
-	cbiCorner.Parent = checkboxInner
+    -- Hover effect for checkbox container
+    autoConnectBtn.MouseEnter:Connect(function()
+        autoConnectContainer.BackgroundColor3 = Color3.fromRGB(42, 42, 50)
+    end)
+    autoConnectBtn.MouseLeave:Connect(function()
+        autoConnectContainer.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
+    end)
 
-	-- Label
-	local autoConnectLabel = Instance.new("TextLabel")
-	autoConnectLabel.Text = "Auto-Connect"
-	autoConnectLabel.Font = Enum.Font.Gotham
-	autoConnectLabel.TextSize = 11
-	autoConnectLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-	autoConnectLabel.BackgroundTransparency = 1
-	autoConnectLabel.Position = UDim2.new(0, 32, 0, 0)
-	autoConnectLabel.Size = UDim2.new(1, -36, 1, 0)
-	autoConnectLabel.TextXAlignment = Enum.TextXAlignment.Left
-	autoConnectLabel.Parent = autoConnectContainer
+    -- ═══════════════════════════════════════════
+    -- SECTION 3: TERMINAL LOG (fills remaining space)
+    -- ═══════════════════════════════════════════
+    -- Terminal Label
+    local termLabel = Instance.new("TextLabel")
+    termLabel.Text = "TERMINAL"
+    termLabel.Font = Enum.Font.GothamBold
+    termLabel.TextSize = 10
+    termLabel.TextColor3 = Color3.fromRGB(90, 90, 100)
+    termLabel.BackgroundTransparency = 1
+    termLabel.Size = UDim2.new(1, 0, 0, 14)
+    termLabel.TextXAlignment = Enum.TextXAlignment.Left
+    termLabel.LayoutOrder = 3
+    termLabel.Parent = rootFrame
 
-	-- Invisible overlay button for checkbox hit area
-	local autoConnectBtn = Instance.new("TextButton")
-	autoConnectBtn.Size = UDim2.new(1, 0, 1, 0)
-	autoConnectBtn.BackgroundTransparency = 1
-	autoConnectBtn.Text = ""
-	autoConnectBtn.ZIndex = 3 -- Di atas elemen visual agar klik selalu terdeteksi
-	autoConnectBtn.Parent = autoConnectContainer
+    -- Terminal container: Fills ALL remaining vertical space
+    local terminalContainer = Instance.new("Frame")
+    terminalContainer.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
+    terminalContainer.BorderSizePixel = 0
+    terminalContainer.LayoutOrder = 4
+    terminalContainer.ClipsDescendants = true
+    terminalContainer.Parent = rootFrame
 
-	-- Hover effect for checkbox container
-	autoConnectBtn.MouseEnter:Connect(function()
-		autoConnectContainer.BackgroundColor3 = Color3.fromRGB(42, 42, 50)
-	end)
-	autoConnectBtn.MouseLeave:Connect(function()
-		autoConnectContainer.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
-	end)
+    local termCorner = Instance.new("UICorner")
+    termCorner.CornerRadius = UDim.new(0, 5)
+    termCorner.Parent = terminalContainer
 
-	-- ═══════════════════════════════════════════
-	-- SECTION 3: TERMINAL LOG (fills remaining space)
-	-- ═══════════════════════════════════════════
-	-- Terminal Label
-	local termLabel = Instance.new("TextLabel")
-	termLabel.Text = "TERMINAL"
-	termLabel.Font = Enum.Font.GothamBold
-	termLabel.TextSize = 10
-	termLabel.TextColor3 = Color3.fromRGB(90, 90, 100)
-	termLabel.BackgroundTransparency = 1
-	termLabel.Size = UDim2.new(1, 0, 0, 14)
-	termLabel.TextXAlignment = Enum.TextXAlignment.Left
-	termLabel.LayoutOrder = 3
-	termLabel.Parent = rootFrame
+    local termStroke = Instance.new("UIStroke")
+    termStroke.Color = Color3.fromRGB(40, 40, 48)
+    termStroke.Thickness = 1
+    termStroke.Parent = terminalContainer
 
-	-- Terminal container: Fills ALL remaining vertical space
-	local terminalContainer = Instance.new("Frame")
-	terminalContainer.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
-	terminalContainer.BorderSizePixel = 0
-	terminalContainer.LayoutOrder = 4
-	terminalContainer.ClipsDescendants = true
-	terminalContainer.Parent = rootFrame
+    -- Scrolling log area inside terminal
+    local scrollingFrame = Instance.new("ScrollingFrame")
+    scrollingFrame.Size = UDim2.new(1, -8, 1, -4)
+    scrollingFrame.Position = UDim2.new(0, 4, 0, 2)
+    scrollingFrame.BackgroundTransparency = 1
+    scrollingFrame.BorderSizePixel = 0
+    scrollingFrame.ScrollBarThickness = 4
+    scrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 85)
+    scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scrollingFrame.Parent = terminalContainer
 
-	local termCorner = Instance.new("UICorner")
-	termCorner.CornerRadius = UDim.new(0, 5)
-	termCorner.Parent = terminalContainer
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 1)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Parent = scrollingFrame
 
-	local termStroke = Instance.new("UIStroke")
-	termStroke.Color = Color3.fromRGB(40, 40, 48)
-	termStroke.Thickness = 1
-	termStroke.Parent = terminalContainer
+    -- ═══════════════════════════════════════════
+    -- RESPONSIVITY: Dynamically size terminal to fill remaining space
+    -- ═══════════════════════════════════════════
+    local function updateLayout()
+        -- Calculate how much space header + controls + termLabel use
+        local usedHeight = rootLayout.AbsoluteContentSize.Y - terminalContainer.AbsoluteSize.Y
+        local availableHeight = rootFrame.AbsoluteSize.Y - 16 -- rootPadding top+bottom
+        local termHeight = math.max(100, availableHeight - usedHeight)
+        terminalContainer.Size = UDim2.new(1, 0, 0, termHeight)
+    end
 
-	-- Scrolling log area inside terminal
-	local scrollingFrame = Instance.new("ScrollingFrame")
-	scrollingFrame.Size = UDim2.new(1, -8, 1, -4)
-	scrollingFrame.Position = UDim2.new(0, 4, 0, 2)
-	scrollingFrame.BackgroundTransparency = 1
-	scrollingFrame.BorderSizePixel = 0
-	scrollingFrame.ScrollBarThickness = 4
-	scrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 85)
-	scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-	scrollingFrame.Parent = terminalContainer
+    -- Fire on widget resize
+    widget:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateLayout)
+    -- Also fire once after initial render
+    task.defer(updateLayout)
 
-	local listLayout = Instance.new("UIListLayout")
-	listLayout.Padding = UDim.new(0, 1)
-	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	listLayout.Parent = scrollingFrame
-
-	-- ═══════════════════════════════════════════
-	-- RESPONSIVITY: Dynamically size terminal to fill remaining space
-	-- ═══════════════════════════════════════════
-	local function updateLayout()
-		-- Calculate how much space header + controls + termLabel use
-		local usedHeight = rootLayout.AbsoluteContentSize.Y - terminalContainer.AbsoluteSize.Y
-		local availableHeight = rootFrame.AbsoluteSize.Y - 16 -- rootPadding top+bottom
-		local termHeight = math.max(100, availableHeight - usedHeight)
-		terminalContainer.Size = UDim2.new(1, 0, 0, termHeight)
-	end
-
-	-- Fire on widget resize
-	widget:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateLayout)
-	-- Also fire once after initial render
-	task.defer(updateLayout)
-
-	-- ═══════════════════════════════════════════
-	-- Store references for external access
-	-- ═══════════════════════════════════════════
-	UIManager.widget = widget
-	UIManager.connectBtn = connectBtn
-	UIManager.autoConnectBtn = autoConnectBtn
-	UIManager.checkboxInner = checkboxInner
-	UIManager.checkboxStroke = cbStroke
-	UIManager.statusLabel = statusLabel
-	UIManager.scrollingFrame = scrollingFrame
-	UIManager.listLayout = listLayout
-	UIManager.terminalContainer = terminalContainer
-	UIManager.termStroke = termStroke
-	UIManager.logsCount = 0
-
-	-- Simpan referensi hover state agar setStatus bisa update base color
-	UIManager._btnBaseColor = _btnBaseColor
-	UIManager._isHovering = _isHovering
-	UIManager._updateBtnBaseColor = function(newColor)
-		_btnBaseColor = newColor
-		if not _isHovering then
-			connectBtn.BackgroundColor3 = newColor
-		end
-	end
-
-	return UIManager
+    -- ═══════════════════════════════════════════
+    -- Store references for external access
+    -- ═══════════════════════════════════════════
+    UIManager.widget = widget
+    UIManager.connectBtn = connectBtn
+    UIManager.autoConnectBtn = autoConnectBtn
+    UIManager.checkboxInner = checkboxInner
+    UIManager.checkboxStroke = cbStroke
+    UIManager.statusLabel = statusLabel
+    UIManager.scrollingFrame = scrollingFrame
+    UIManager.listLayout = listLayout
+    UIManager.terminalContainer = terminalContainer
+    UIManager.termStroke = termStroke
+    UIManager.logsCount = 0
+    
+    -- Simpan referensi hover state agar setStatus bisa update base color
+    UIManager._btnBaseColor = _btnBaseColor
+    UIManager._isHovering = _isHovering
+    UIManager._updateBtnBaseColor = function(newColor)
+        _btnBaseColor = newColor
+        if not _isHovering then
+            connectBtn.BackgroundColor3 = newColor
+        end
+    end
+    
+    return UIManager
 end
 
 -- ═══════════════════════════════════════════
 -- Menambahkan baris log baru ke terminal GUI
 -- ═══════════════════════════════════════════
 function UIManager:addLog(text, color)
-	local timestamp = os.date("%H:%M:%S")
-	local displayText = "[" .. timestamp .. "] " .. text
+    local timestamp = os.date("%H:%M:%S")
+    local displayText = "[" .. timestamp .. "] " .. text
 
-	local logLabel = Instance.new("TextLabel")
-	logLabel.Text = displayText
-	logLabel.Font = Enum.Font.Code
-	logLabel.TextSize = 11
-	logLabel.TextColor3 = color or Color3.fromRGB(180, 180, 190)
-	logLabel.BackgroundTransparency = 1
-	logLabel.TextWrapped = true
-	logLabel.TextXAlignment = Enum.TextXAlignment.Left
-	logLabel.RichText = false
-	logLabel.AutomaticSize = Enum.AutomaticSize.Y
-	logLabel.Size = UDim2.new(1, -6, 0, 0) -- Width fill, height auto
+    local logLabel = Instance.new("TextLabel")
+    logLabel.Text = displayText
+    logLabel.Font = Enum.Font.Code
+    logLabel.TextSize = 11
+    logLabel.TextColor3 = color or Color3.fromRGB(180, 180, 190)
+    logLabel.BackgroundTransparency = 1
+    logLabel.TextWrapped = true
+    logLabel.TextXAlignment = Enum.TextXAlignment.Left
+    logLabel.RichText = false
+    logLabel.AutomaticSize = Enum.AutomaticSize.Y
+    logLabel.Size = UDim2.new(1, -6, 0, 0) -- Width fill, height auto
 
-	local logPadding = Instance.new("UIPadding")
-	logPadding.PaddingLeft = UDim.new(0, 4)
-	logPadding.PaddingTop = UDim.new(0, 1)
-	logPadding.PaddingBottom = UDim.new(0, 1)
-	logPadding.Parent = logLabel
-
-	logLabel.LayoutOrder = self.logsCount
-	logLabel.Parent = self.scrollingFrame
-	self.logsCount = self.logsCount + 1
-
-	-- Limit max logs to prevent memory bloat
-	if self.logsCount > 150 then
-		local first = self.scrollingFrame:FindFirstChildWhichIsA("TextLabel")
-		if first then first:Destroy() end
-	end
-
-	-- Update canvas size after a frame so AutomaticSize has resolved
-	task.defer(function()
-		self.scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, self.listLayout.AbsoluteContentSize.Y + 4)
-		self.scrollingFrame.CanvasPosition = Vector2.new(0, math.max(0, self.listLayout.AbsoluteContentSize.Y - self.scrollingFrame.AbsoluteSize.Y))
-	end)
+    local logPadding = Instance.new("UIPadding")
+    logPadding.PaddingLeft = UDim.new(0, 4)
+    logPadding.PaddingTop = UDim.new(0, 1)
+    logPadding.PaddingBottom = UDim.new(0, 1)
+    logPadding.Parent = logLabel
+    
+    logLabel.LayoutOrder = self.logsCount
+    logLabel.Parent = self.scrollingFrame
+    self.logsCount = self.logsCount + 1
+    
+    -- Limit max logs to prevent memory bloat
+    if self.logsCount > 150 then
+        local first = self.scrollingFrame:FindFirstChildWhichIsA("TextLabel")
+        if first then first:Destroy() end
+    end
+    
+    -- Update canvas size after a frame so AutomaticSize has resolved
+    task.defer(function()
+        self.scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, self.listLayout.AbsoluteContentSize.Y + 4)
+        self.scrollingFrame.CanvasPosition = Vector2.new(0, math.max(0, self.listLayout.AbsoluteContentSize.Y - self.scrollingFrame.AbsoluteSize.Y))
+    end)
 end
 
 -- ═══════════════════════════════════════════
 -- 3 State Setter (Disconnected, Waiting, Connected)
 -- ═══════════════════════════════════════════
 function UIManager:setStatus(stateStr)
-	if stateStr == "disconnected" then
-		self.connectBtn.Text = "  Connect"
-		self._updateBtnBaseColor(Color3.fromRGB(40, 160, 80))
-		self.statusLabel.Text = "● Disconnected"
-		self.statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-		self.termStroke.Color = Color3.fromRGB(40, 40, 48)
+    if stateStr == "disconnected" then
+        self.connectBtn.Text = "  Connect"
+        self._updateBtnBaseColor(Color3.fromRGB(40, 160, 80))
+        self.statusLabel.Text = "● Disconnected"
+        self.statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        self.termStroke.Color = Color3.fromRGB(40, 40, 48)
 
-	elseif stateStr == "waiting" then
-		self.connectBtn.Text = "  Disconnect"
-		self._updateBtnBaseColor(Color3.fromRGB(180, 50, 50))
-		self.statusLabel.Text = "● Waiting for AI..."
-		self.statusLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
-		self.termStroke.Color = Color3.fromRGB(130, 110, 50)
+    elseif stateStr == "waiting" then
+        self.connectBtn.Text = "  Disconnect"
+        self._updateBtnBaseColor(Color3.fromRGB(180, 50, 50))
+        self.statusLabel.Text = "● Waiting for AI..."
+        self.statusLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+        self.termStroke.Color = Color3.fromRGB(130, 110, 50)
 
-	elseif stateStr == "connected" then
-		self.connectBtn.Text = "  Disconnect"
-		self._updateBtnBaseColor(Color3.fromRGB(180, 50, 50))
-		self.statusLabel.Text = "● Connected"
-		self.statusLabel.TextColor3 = Color3.fromRGB(100, 230, 120)
-		self.termStroke.Color = Color3.fromRGB(50, 120, 60)
-	end
+    elseif stateStr == "connected" then
+        self.connectBtn.Text = "  Disconnect"
+        self._updateBtnBaseColor(Color3.fromRGB(180, 50, 50))
+        self.statusLabel.Text = "● Connected"
+        self.statusLabel.TextColor3 = Color3.fromRGB(100, 230, 120)
+        self.termStroke.Color = Color3.fromRGB(50, 120, 60)
+    end
 end
 
 -- Mengubah visual custom checkbox
 function UIManager:setAutoConnectState(isAuto)
-	self.checkboxInner.Visible = isAuto
-	if isAuto then
-		self.checkboxStroke.Color = Color3.fromRGB(80, 170, 255)
-	else
-		self.checkboxStroke.Color = Color3.fromRGB(80, 80, 95)
-	end
+    self.checkboxInner.Visible = isAuto
+    if isAuto then
+        self.checkboxStroke.Color = Color3.fromRGB(80, 170, 255)
+    else
+        self.checkboxStroke.Color = Color3.fromRGB(80, 80, 95)
+    end
 end
 
 -- Sakelar visibilitas panel GUI
 function UIManager:toggleVisibility()
-	if self.widget then
-		self.widget.Enabled = not self.widget.Enabled
-	end
+    if self.widget then
+        self.widget.Enabled = not self.widget.Enabled
+    end
 end
 
 return UIManager
 ]]></ProtectedString>
-				<string name="ScriptGuid">{8B113EA4-CA11-4BDF-BFA7-98B5E077AC2E}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">ui_manager</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX6852D813E05543C487103F791CF924EF">
+		<Item class="ModuleScript" referent="RBX_update_script_source">
 			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	local code = data
-	if not code or code == "" then
-		return { status = "error", error = "Kode yang dieksekusi tidak boleh kosong." }
-	end
-
-	local HttpService = game:GetService("HttpService")
-
-	-- Bungkus code ke dalam fungsi return
-	local wrappedCode = "return function()\n" .. code .. "\nend"
-
-	local moduleScript = Instance.new("ModuleScript")
-	moduleScript.Name = "AI_Execute_Temp"
-	moduleScript.Source = wrappedCode
-
-	-- Taruh di ReplicatedStorage sementara agar bisa di-require
-	moduleScript.Parent = game:GetService("ReplicatedStorage")
-
-	local resultData = nil
-	local execError = nil
-	local isFinished = false
-
-	-- Eksekusi asinkron dengan batas waktu (timeout) 5 detik
-	task.spawn(function()
-		local reqSuccess, func = pcall(function() return require(moduleScript) end)
-		if reqSuccess and type(func) == "function" then
-			local execSuccess, res = pcall(func)
-			if execSuccess then
-				resultData = res
-			else
-				execError = "Runtime Error: " .. tostring(res)
-			end
-		else
-			execError = "Syntax/Require Error: " .. tostring(func)
-		end
-		isFinished = true
-	end)
-
-	-- Tunggu hingga 5 detik
-	local timeWaited = 0
-	while not isFinished and timeWaited < 5 do
-		timeWaited = timeWaited + task.wait()
-	end
-
-	-- Pembersihan (Wajib dihancurkan)
-	pcall(function() moduleScript:Destroy() end)
-
-	if not isFinished then
-		return { status = "error", error = "Timeout 5 detik terlampaui. Kemungkinan ada infinite loop tanpa task.wait()." }
-	end
-
-	if execError then
-		return { status = "error", error = execError }
-	end
-
-	-- Cegah return nil error
-	if resultData == nil then
-		return { status = "success", result = "Eksekusi berhasil (Tidak ada nilai kembalian)." }
-	end
-
-	-- JSON Encode untuk mencegah raw Instance return crash
-	local serializeSuccess, jsonRes = pcall(function()
-		return HttpService:JSONEncode(resultData)
-	end)
-
-	if serializeSuccess then
-		return { status = "success", result = HttpService:JSONDecode(jsonRes) } -- decode kembali agar format aslinya diteruskan oleh router
-	else
-		return { status = "error", error = "Gagal menserialisasi hasil (Dilarang mengembalikan raw Roblox Instance): " .. tostring(jsonRes) }
-	end
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{E656AA51-AC95-4EED-9C73-CA164FE1FA52}</string>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">execute_luau</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBX87CCA7F1F7C047D69399148376B5D38E">
-			<Properties>
+				<bool name="Disabled">false</bool>
 				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">update_script_source</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<SharedString name="Tags"></SharedString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	-- Guardrail: Cegah penghapusan Service utama
-	local protectedServices = {
-		"Workspace", "Players", "Lighting", "MaterialService", "NetworkClient", 
-		"ReplicatedFirst", "ReplicatedStorage", "ServerScriptService", "ServerStorage", 
-		"StarterGui", "StarterPack", "StarterPlayer", "Teams", "SoundService", "Chat", 
-		"TextChatService", "VoiceChatService"
-	}
-
-	if targetInstance.Parent == game or targetInstance.Parent == nil then
-		for _, serviceName in ipairs(protectedServices) do
-			if targetInstance.Name == serviceName or targetInstance.ClassName == serviceName then
-				return { status = "error", error = "GUARDRAIL BLOCKED: Anda tidak diizinkan untuk menghapus layanan tingkat atas (" .. targetInstance.Name .. ")." }
-			end
-		end
-	end
-
-	local name = targetInstance.Name
-	local className = targetInstance.ClassName
-	local parentName = targetInstance.Parent and targetInstance.Parent.Name or "nil"
-
-	local success, err = pcall(function()
-		targetInstance:Destroy()
-	end)
-
-	if success then
-		return { status = "success", result = "Instance '" .. name .. "' (" .. className .. ") berhasil dihapus dari " .. parentName .. "." }
-	else
-		return { status = "error", error = "Gagal menghapus instance: " .. tostring(err) }
-	end
+    if targetInstance:IsA("LuaSourceContainer") then
+        local newCode = data or ""
+        
+        -- Catatan: Validasi AST menggunakan loadstring() sengaja DIHAPUS.
+        -- Karena secara default Roblox Studio mematikan LoadStringEnabled, menggunakannya 
+        -- hanya akan membuat AI gagal terus menerus untuk menulis script. 
+        -- Error syntax akan ditangkap secara native oleh Roblox Output.
+        
+        ctx.scriptHistory[targetPath] = targetInstance.Source
+        targetInstance.Source = newCode
+        return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil diperbarui." }
+    else
+        return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
+    end
 end
 ]]></ProtectedString>
-				<string name="ScriptGuid">{EBD3665C-2719-4288-930C-3902EFF4CCB6}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">delete_instance</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBX57ADCE105E57454897B1666DA1D52563">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	local success, config = pcall(function() return ctx.HttpService:JSONDecode(data) end)
-	if not success or not config.ClassName then
-		return { status = "error", error = "Format data JSON tidak valid atau ClassName hilang." }
-	end
-
-	local newSuccess, newInst = pcall(function()
-		local inst = Instance.new(config.ClassName)
-		inst.Parent = targetInstance
-
-		if config.Properties then
-			for prop, val in pairs(config.Properties) do
-				pcall(function() inst[prop] = val end)
-			end
-		end
-		return inst
-	end)
-
-	if newSuccess then
-		return { status = "success", result = "Instance '"..config.ClassName.."' berhasil dibuat di " .. targetPath }
-	else
-		return { status = "error", error = "Gagal membuat Instance. Pastikan ClassName valid." }
-	end
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{4F0529C1-A158-4652-B56B-A8B224EF87F5}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">create_instance</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBXCA3AFE3B00224D6686C665EF3D5A6DAA">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	local CollectionService = game:GetService("CollectionService")
-
-	local props = {
-		Name = targetInstance.Name,
-		ClassName = targetInstance.ClassName,
-		Parent = targetInstance.Parent and targetInstance.Parent.Name or "nil",
-	}
-
-	-- Ambil Properties Umum secara aman via pcall
-	local function tryProp(propName)
-		local success, val = pcall(function() return targetInstance[propName] end)
-		if success and val ~= nil then
-			if typeof(val) == "Vector3" then
-				props[propName] = {math.round(val.X*100)/100, math.round(val.Y*100)/100, math.round(val.Z*100)/100}
-			elseif typeof(val) == "Color3" then
-				props[propName] = {math.round(val.R * 255), math.round(val.G * 255), math.round(val.B * 255)}
-			elseif typeof(val) == "CFrame" then
-				props[propName] = tostring(val)
-			elseif typeof(val) == "EnumItem" then
-				props[propName] = val.Name
-			elseif typeof(val) == "UDim2" then
-				props[propName] = {val.X.Scale, val.X.Offset, val.Y.Scale, val.Y.Offset}
-			elseif typeof(val) == "Instance" then
-				props[propName] = val:GetFullName()
-			else
-				props[propName] = val
-			end
-		end
-	end
-
-	local commonProps = {
-		"Anchored", "CanCollide", "Transparency", "Reflectance", 
-		"Position", "Size", "Color", "Material", "Text", "TextColor3", 
-		"BackgroundTransparency", "BackgroundColor3", "Visible", "Enabled",
-		"Volume", "Playing", "Looped", "Value"
-	}
-
-	for _, prop in ipairs(commonProps) do
-		tryProp(prop)
-	end
-
-	-- Attributes & Tags
-	pcall(function()
-		props.Attributes = targetInstance:GetAttributes()
-	end)
-	pcall(function()
-		props.Tags = CollectionService:GetTags(targetInstance)
-	end)
-
-	return { status = "success", result = props }
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{3B18E6FF-1FFC-4B48-936D-8471CB3820C6}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">get_properties</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
-			</Properties>
-		</Item>
-		<Item class="ModuleScript" referent="RBXD0E8AE88B6B24ECE9F916D7EFC8F978E">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-	local query = tostring(data)
-	if not query or query == "" then
-		return { status = "error", error = "Query pencarian tidak boleh kosong." }
-	end
-
-	local matches = {}
-	local matchCount = 0
-	local MAX_MATCHES = 50
-
-	local searchableServices = {
-		game:GetService("Workspace"),
-		game:GetService("ServerScriptService"),
-		game:GetService("ReplicatedStorage"),
-		game:GetService("StarterPlayer"),
-		game:GetService("StarterGui")
-	}
-
-	local function searchInScript(scriptObj)
-		local success, source = pcall(function() return scriptObj.Source end)
-		if not success or not source then return end
-
-		local lines = string.split(source, "\n")
-		for i, line in ipairs(lines) do
-			-- Coba cari dengan plain text dulu, jika gagal coba pattern
-			local found = string.find(line, query, 1, true)
-			if not found then
-				pcall(function() found = string.find(line, query) end)
-			end
-
-			if found then
-				table.insert(matches, {
-					script = scriptObj:GetFullName(),
-					line = i,
-					content = string.match(line, "^%s*(.-)%s*$") or line
-				})
-				matchCount = matchCount + 1
-				if matchCount >= MAX_MATCHES then
-					return true
-				end
-			end
-		end
-		return false
-	end
-
-	for _, service in ipairs(searchableServices) do
-		pcall(function()
-			local descendants = service:GetDescendants()
-			for _, desc in ipairs(descendants) do
-				if desc:IsA("LuaSourceContainer") then
-					if searchInScript(desc) then
-						break
-					end
-				end
-			end
-		end)
-		if matchCount >= MAX_MATCHES then
-			break
-		end
-	end
-
-	return { status = "success", matches = matches, count = matchCount, limitReached = (matchCount >= MAX_MATCHES) }
-end
-]]></ProtectedString>
-				<string name="ScriptGuid">{74D52488-8890-4D93-B5D6-37BBE9F0DF1E}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">script_grep</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
 			</Properties>
 		</Item>
 	</Item>

@@ -4,7 +4,7 @@ import { Server as HttpServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { exec, execSync } from 'child_process';
-import { taskQueue, resolvePendingTask } from './task-queue';
+import { taskQueue, resolvePendingTask, taskEmitter } from './task-queue';
 
 interface ActivityLog {
     id: string;
@@ -97,6 +97,18 @@ export function startBridgeServer(port: number = 3055) {
         res.json({ totalTasks, successCount, errorCount, sessionStart, studioConnected, port });
     });
 
+    const waitingPollers: express.Response[] = [];
+
+    taskEmitter.on('new_task', () => {
+        if (taskQueue.length > 0 && waitingPollers.length > 0) {
+            const res = waitingPollers.shift();
+            const task = taskQueue.shift();
+            totalTasks++;
+            addLog(io, 'task', `Mengirim perintah '${task?.command}' ke Studio${task?.target ? ` → ${task.target}` : ''}.`);
+            res?.json(task);
+        }
+    });
+
     // Endpoint Studio Polling
     app.get('/api/tasks', (req, res) => {
         if (!studioConnected) {
@@ -121,7 +133,25 @@ export function startBridgeServer(port: number = 3055) {
             addLog(io, 'task', `Mengirim perintah '${task?.command}' ke Studio${task?.target ? ` → ${task.target}` : ''}.`);
             res.json(task);
         } else {
-            res.json({ id: null });
+            // Long-polling: tunggu maksimal 20 detik
+            const timeoutId = setTimeout(() => {
+                const index = waitingPollers.indexOf(res);
+                if (index !== -1) {
+                    waitingPollers.splice(index, 1);
+                    res.json({ id: null });
+                }
+            }, 20000);
+
+            waitingPollers.push(res);
+
+            // Bersihkan jika terputus prematur
+            req.on('close', () => {
+                clearTimeout(timeoutId);
+                const index = waitingPollers.indexOf(res);
+                if (index !== -1) {
+                    waitingPollers.splice(index, 1);
+                }
+            });
         }
     });
 
