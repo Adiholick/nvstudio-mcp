@@ -32,7 +32,7 @@ startBridgeServer(3055);
 const server = new Server(
   {
     name: "nvstudio-mcp",
-    version: "2.1.3",
+    version: "2.1.4",
   },
   {
     capabilities: {

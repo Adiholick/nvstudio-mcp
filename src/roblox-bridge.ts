@@ -94,7 +94,7 @@ function broadcastStatus() {
     const statusEvent = {
         mcpConnected,
         studioCount: ssePeers.size,
-        serverVersion: '2.1.3',
+        serverVersion: '2.1.4',
     };
     broadcastEvent('status', statusEvent);
     // Juga enqueue untuk Studio yang belum polling saat ini
@@ -224,12 +224,9 @@ export function startBridgeServer(port: number = 3055) {
                 dashboardOpened = true;
                 const url = `http://localhost:${port}`;
                 const startCmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
-                const isDaemon = process.argv.includes('--daemon') || process.argv.includes('-d');
-                if (!isDaemon) {
-                    exec(startCmd, (error) => {
-                        if (error) console.error(`[Bridge] Gagal membuka browser:`, error);
-                    });
-                }
+                exec(startCmd, (error) => {
+                    if (error) console.error(`[Bridge] Gagal membuka browser:`, error);
+                });
             }
         }
 
@@ -239,7 +236,7 @@ export function startBridgeServer(port: number = 3055) {
 
         // Selalu sertakan status terkini
         const events: Array<Record<string, unknown>> = [
-            { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.3' },
+            { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.4' },
         ];
 
         // Tambahkan events tertunda (misalnya task requests)
@@ -292,7 +289,7 @@ export function startBridgeServer(port: number = 3055) {
         const peer: SsePeer = { studioId, res, connectedAt: Date.now(), heartbeatTimer, silenceTimer };
         ssePeers.set(studioId, peer);
 
-        sendEvent(peer, 'status', { mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.3' });
+        sendEvent(peer, 'status', { mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.4' });
 
         function cleanup() {
             clearInterval(heartbeatTimer);
