@@ -19,6 +19,8 @@ $InstallDir = Join-Path $HOME ".nvstudio-mcp"
 if (Test-Path $InstallDir) {
     Write-Host "🔄 Memperbarui nvstudio-mcp yang sudah ada di $InstallDir..." -ForegroundColor Yellow
     Set-Location $InstallDir
+    git reset --hard HEAD
+    git clean -fd
     git pull origin main
 } else {
     Write-Host "📥 Mengunduh nvstudio-mcp..." -ForegroundColor Green
