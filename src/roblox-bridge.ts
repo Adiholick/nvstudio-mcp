@@ -94,7 +94,7 @@ function broadcastStatus() {
     const statusEvent = {
         mcpConnected,
         studioCount: ssePeers.size,
-        serverVersion: '2.1.5',
+        serverVersion: '2.1.6',
     };
     broadcastEvent('status', statusEvent);
     // Juga enqueue untuk Studio yang belum polling saat ini
@@ -236,7 +236,7 @@ export function startBridgeServer(port: number = 3055) {
 
         // Selalu sertakan status terkini
         const events: Array<Record<string, unknown>> = [
-            { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.5' },
+            { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.6' },
         ];
 
         // Tambahkan events tertunda (misalnya task requests)
@@ -289,7 +289,7 @@ export function startBridgeServer(port: number = 3055) {
         const peer: SsePeer = { studioId, res, connectedAt: Date.now(), heartbeatTimer, silenceTimer };
         ssePeers.set(studioId, peer);
 
-        sendEvent(peer, 'status', { mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.5' });
+        sendEvent(peer, 'status', { mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.6' });
 
         function cleanup() {
             clearInterval(heartbeatTimer);

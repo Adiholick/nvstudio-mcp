@@ -32,7 +32,7 @@ startBridgeServer(3055);
 const server = new Server(
   {
     name: "nvstudio-mcp",
-    version: "2.1.5",
+    version: "2.1.6",
   },
   {
     capabilities: {
@@ -242,13 +242,7 @@ async function main() {
   process.stdin.on('end', shutdown);
   process.stdin.on('error', shutdown);
 
-  // Fallback khusus Windows: cek apakah stdin masih readable secara berkala
-  setInterval(() => {
-    if (!process.stdin.readable) {
-      console.error("[nvstudio-mcp] stdin tidak readable lagi. IDE kemungkinan sudah ditutup.");
-      shutdown();
-    }
-  }, 3000);
+  // Fallback dihapus karena menyebabkan disconnect palsu di beberapa environment AGY
 }
 
 if (isDaemon) {
