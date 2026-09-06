@@ -15,6 +15,14 @@ interface ActivityLog {
 
 export let isBridgeHosting = false;
 
+// Global process error handlers agar server bridge tidak mati mendadak
+process.on('uncaughtException', (err) => {
+    console.error('[Bridge] Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('[Bridge] Unhandled Rejection:', reason);
+});
+
 const activityLogs: ActivityLog[] = [];
 let totalTasks = 0;
 let successCount = 0;
@@ -181,10 +189,11 @@ export function startBridgeServer(port: number = 3055) {
 
     // ── /api/stats ─────────────────────────────────────────────────────────────
     app.get('/api/stats', (req, res) => {
+        const activeStudios = Math.max(ssePeers.size, studioEventQueues.size);
         res.json({
             totalTasks, successCount, errorCount, sessionStart,
-            studioConnected: ssePeers.size > 0,
-            studioCount: ssePeers.size,
+            studioConnected: activeStudios > 0,
+            studioCount: activeStudios,
             mcpConnected,
             port,
         });
@@ -193,7 +202,8 @@ export function startBridgeServer(port: number = 3055) {
     // ── /api/ping ─────────────────────────────────────────────────────────────
     // Dipertahankan untuk backward-compat (installer check, health check).
     app.get('/api/ping', (req, res) => {
-        res.json({ status: 'ok', studioCount: ssePeers.size, mcpConnected, timestamp: Date.now() });
+        const activeStudios = Math.max(ssePeers.size, studioEventQueues.size);
+        res.json({ status: 'ok', studioCount: activeStudios, mcpConnected, timestamp: Date.now() });
     });
 
     // ── /api/stream (Snapshot endpoint untuk Roblox GetAsync) ───────────────

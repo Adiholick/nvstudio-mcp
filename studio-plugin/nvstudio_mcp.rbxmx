@@ -604,16 +604,12 @@ local function handleSSELine(line)
 	-- status: update mcpConnected
 	if kind == "status" then
 		local newActive = decoded.mcpConnected == true
-		if newActive ~= mcpAgentActive then
-			mcpAgentActive = newActive
-			if ui then
-				if mcpAgentActive then
-					ui:setStatus("connected")
-					ui:addLog("[System] ✅ IDE Agent (Antigravity) terhubung ke MCP.", Color3.fromRGB(100, 255, 100))
-				else
-					ui:setStatus("waiting")
-					ui:addLog("[System] IDE Agent terputus dari MCP. Menunggu...", Color3.fromRGB(255, 200, 100))
-				end
+		mcpAgentActive = newActive
+		if ui then
+			-- Jaga status tetap Connected selama bridge server hidup
+			ui:setStatus("connected")
+			if newActive then
+				ui:addLog("[System] ✅ IDE Agent (Antigravity) aktif.", Color3.fromRGB(100, 255, 100))
 			end
 		end
 		return
@@ -651,93 +647,60 @@ end
 function startConnectionLoop()
 	if isRunning then return end
 	isRunning = true
+	isManualDisconnect = false
 	reconnectDelay = RECONNECT_DELAY_INITIAL
 
 	if ui then
-		ui:addLog("[System] NVStudio MCP v2.1.0 — Menghubungkan ke server...", Color3.fromRGB(200, 200, 200))
+		ui:addLog("[System] NVStudio MCP v2.1.2 — Menghubungkan ke server...", Color3.fromRGB(200, 200, 200))
 	end
 
+	local consecutiveErrors = 0
+
 	while isRunning and not isManualDisconnect do
-		-- Langkah 1: Ping untuk cek apakah server hidup
-		local pingOk, pingRaw = pcall(function()
+		-- Stream / polling snapshot dari server
+		local streamOk, streamRaw = pcall(function()
 			return HttpService:GetAsync(
-				PING_URL .. "?studioId=" .. HttpService:UrlEncode(STUDIO_ID) .. "&t=" .. tostring(os.clock()),
+				STREAM_URL .. "?studioId=" .. HttpService:UrlEncode(STUDIO_ID),
 				false
 			)
 		end)
 
-		if not pingOk then
-			-- Server tidak reachable
-			if serverReachable then
-				serverReachable = false
-				mcpAgentActive  = false
-				if ui then
-					ui:setStatus("waiting")
-					ui:addLog("[System] ⚠️ Server MCP tidak dapat dijangkau. Retry dalam " .. reconnectDelay .. "s...", Color3.fromRGB(255, 150, 50))
-				end
-			end
-			task.wait(reconnectDelay)
-			reconnectDelay = math.min(reconnectDelay * 2, RECONNECT_DELAY_MAX)
-		else
-			-- Server reachable → parse ping response
+		if streamOk and streamRaw and streamRaw ~= "" then
+			consecutiveErrors = 0
 			reconnectDelay = RECONNECT_DELAY_INITIAL
 
-			local pingData = nil
-			pcall(function()
-				pingData = HttpService:JSONDecode(pingRaw)
-			end)
-
-			local wasReachable = serverReachable
-			serverReachable = true
-
-			if not wasReachable and ui then
-				ui:addLog("[System] ✅ Server MCP terhubung. Membuka event stream...", Color3.fromRGB(100, 255, 150))
+			if not serverReachable then
+				serverReachable = true
+				if ui then
+					ui:setStatus("connected")
+					ui:addLog("[System] ✅ Server MCP terhubung & siap.", Color3.fromRGB(100, 255, 150))
+				end
 			end
 
-			-- Update mcpConnected dari ping response
-			if pingData then
-				local newActive = pingData.mcpConnected == true
-				if newActive ~= mcpAgentActive then
-					mcpAgentActive = newActive
+			-- Parse baris-baris SSE
+			for line in (streamRaw .. "\n"):gmatch("([^\n]*)\n") do
+				line = line:gsub("\r", "")
+				if line ~= "" then
+					handleSSELine(line)
+				end
+			end
+			task.wait(0.8)
+		else
+			consecutiveErrors = consecutiveErrors + 1
+			-- Toleransi 2x gagal sebelum menandai server unreachable
+			if consecutiveErrors >= 2 then
+				if serverReachable then
+					serverReachable = false
+					mcpAgentActive = false
 					if ui then
-						if mcpAgentActive then
-							ui:setStatus("connected")
-							ui:addLog("[System] ✅ IDE Agent (Antigravity) terhubung ke MCP.", Color3.fromRGB(100, 255, 100))
-						else
-							ui:setStatus("server_connected")
-							-- No need to explicitly add log for IDE Agent wait every time it connects, 
-							-- bridge connected log is enough.
-						end
-					end
-				elseif serverReachable and not mcpAgentActive then
-					-- Tidak ada perubahan tapi pastikan status benar
-					if ui then ui:setStatus("server_connected") end
-				end
-			end
-
-			-- Langkah 2: Buka SSE stream (blocking hingga server menutup koneksi / ~10 detik)
-			-- Server akan mengirim events yang tertunda, heartbeat, lalu tutup.
-			if isRunning and not isManualDisconnect then
-				local streamOk, streamRaw = pcall(function()
-					return HttpService:GetAsync(
-						STREAM_URL .. "?studioId=" .. HttpService:UrlEncode(STUDIO_ID),
-						false
-					)
-				end)
-
-				if streamOk and streamRaw and streamRaw ~= "" then
-					-- Parse baris-baris SSE dari response
-					for line in (streamRaw .. "\n"):gmatch("([^\n]*)\n") do
-						line = line:gsub("\r", "")
-						if line ~= "" then
-							handleSSELine(line)
-						end
+						ui:setStatus("waiting")
+						ui:addLog("[System] ⚠️ Server MCP tidak dapat dijangkau. Retry dalam " .. reconnectDelay .. "s...", Color3.fromRGB(255, 150, 50))
 					end
 				end
 			end
 
-			-- Jeda singkat sebelum cycle berikutnya
-			task.wait(0.5)
+			task.wait(reconnectDelay)
+			reconnectDelay = math.min(reconnectDelay * 2, RECONNECT_DELAY_MAX)
 		end
 	end
 
