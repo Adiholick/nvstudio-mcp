@@ -60,8 +60,7 @@ Jika Anda **tidak** menggunakan skrip installer otomatis di atas (misalnya hanya
 
 ## 🔌 Cara Menggunakan (Konfigurasi MCP Klien AI)
 
-Jika Anda menggunakan AI Client lain seperti **Claude Desktop**, **Windsurf**, atau ingin menambahkan konfigurasi secara manual:
-
+### Klien Berbasis NPM (Cursor, Claude Desktop, Windsurf)
 Tambahkan konfigurasi berikut ke file `mcp.json` Anda:
 ```json
 {
@@ -78,13 +77,30 @@ Tambahkan konfigurasi berikut ke file `mcp.json` Anda:
 ```
 *(AI Anda akan selalu menjalankan versi terbaru dari server Bridge langsung dari NPM!)*
 
+### Klien Berbasis Instalasi Lokal (Antigravity IDE)
+Jika Anda menggunakan instalasi lokal via installer di `%USERPROFILE%\.nvstudio-mcp`, tambahkan ke `~/.gemini/config/mcp_config.json`:
+```json
+{
+  "mcpServers": {
+    "nvstudio-mcp": {
+      "command": "node",
+      "args": [
+        "C:/Users/<Username>/.nvstudio-mcp/dist/index.js"
+      ]
+    }
+  }
+}
+```
+
 ---
 
-## 🖥️ Dashboard Visual & Fitur Pintar v2.0
+## 🖥️ Dashboard Visual & Fitur Unggulan v2.1
 
+- **High-Performance Polling Stream & SSE:** Komunikasi antara Roblox Studio dan Bridge Server menggunakan arsitektur snapshot stream sub-detik yang sangat responsif, stabil, dan bebas latensi.
+- **Clean Log Engine:** Log status pada Roblox Studio hanya diperbarui saat ada perubahan status koneksi sebenarnya (bebas dari log spam berulang).
 - **Visual Dashboard Real-time:** Buka [http://localhost:3055](http://localhost:3055) di browser Anda untuk melihat monitor antrean perintah, log aktivitas AI, status koneksi Studio, dan statistik eksekusi secara visual.
-- **Auto-Detect & Auto-Connect:** Plugin Roblox Studio otomatis menyambung ke server saat aktif dan kembali menunggu (*Waiting*) saat server mati tanpa interupsi manual.
-- **Anti-Zombie Port Handling:** Tidak perlu khawatir error `EADDRINUSE`. Jika port `3055` tertahan oleh proses zombie akibat restart editor/IDE, server akan otomatis membersihkan port tersebut secara aman.
+- **Auto-Detect & Auto-Connect:** Plugin Roblox Studio otomatis menyambung ke server saat aktif dan kembali menunggu (*Waiting*) saat server mati tanpa perlu campur tangan manual.
+- **Anti-Zombie Port Handling:** Port `3055` dibersihkan secara otomatis jika terjadi penutupan atau restart IDE secara paksa.
 
 ---
 

@@ -72,8 +72,29 @@ $AntigravityConfigDir = Join-Path $HOME ".gemini\config"
 $AntigravityGlobalMcpFile = Join-Path $AntigravityConfigDir "mcp_config.json"
 
 if (Test-Path $AntigravityConfigDir) {
-    Write-Host "   -> Terdeteksi Antigravity IDE. Mendaftarkan MCP Server secara global..." -ForegroundColor Green
+    Write-Host "   -> Terdeteksi Antigravity IDE. Memasang AI Agent Skills & mendaftarkan MCP Server..." -ForegroundColor Green
     
+    # Pasang AI Agent Skills (nvstudio-mcp-guide, nvstudio-roblox-sync-guide, dsb.)
+    $AntigravityPluginDir = Join-Path $AntigravityConfigDir "plugins\nvstudio-mcp"
+    if (-not (Test-Path $AntigravityPluginDir)) {
+        New-Item -ItemType Directory -Force -Path $AntigravityPluginDir | Out-Null
+    }
+    Copy-Item -Recurse -Force (Join-Path $InstallDir "agent-plugin\*") $AntigravityPluginDir
+    
+    $DistJs = (Join-Path $InstallDir "dist\index.js").Replace("\", "/")
+    $McpConfigData = @{
+        "mcpServers" = @{
+            "nvstudio-mcp" = @{
+                "command" = "node";
+                "args" = @($DistJs)
+            }
+        }
+    }
+    
+    # Tulis ke plugin mcp_config.json
+    $McpConfigData | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $AntigravityPluginDir "mcp_config.json") -Encoding UTF8
+    
+    # Daftarkan juga di mcp_config.json global Antigravity
     $GlobalConfig = @{ "mcpServers" = @{} }
     if (Test-Path $AntigravityGlobalMcpFile) {
         try {
@@ -82,21 +103,15 @@ if (Test-Path $AntigravityConfigDir) {
             $GlobalConfig = @{ "mcpServers" = @{} }
         }
     }
-    
     if (-not $GlobalConfig.ContainsKey("mcpServers") -or $GlobalConfig["mcpServers"] -eq $null) {
         $GlobalConfig["mcpServers"] = @{}
     }
-    
-    $NodeExe = "node"
-    $DistJs = (Join-Path $InstallDir "dist\index.js").Replace("\", "/")
-    
     $GlobalConfig["mcpServers"]["nvstudio-mcp"] = @{
-        "command" = $NodeExe;
+        "command" = "node";
         "args" = @($DistJs)
     }
-    
     $GlobalConfig | ConvertTo-Json -Depth 5 | Set-Content $AntigravityGlobalMcpFile -Encoding UTF8
-    Write-Host "[OK] NVStudio MCP terdaftar di konfigurasi global Antigravity ($AntigravityGlobalMcpFile)" -ForegroundColor Green
+    Write-Host "[OK] NVStudio MCP & Skills berhasil dipasang ke Antigravity ($AntigravityPluginDir)" -ForegroundColor Green
 } else {
     Write-Host "   -> Antigravity IDE tidak terdeteksi. Melewati instalasi bundle." -ForegroundColor Gray
 }
