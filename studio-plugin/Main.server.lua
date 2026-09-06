@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════════════
--- NVStudio MCP Plugin v2.1.0
--- Arsitektur: SSE via Long-Poll (Roblox tidak punya native SSE client)
+-- NVStudio MCP Plugin v2.1.3
+-- Arsitektur: Polling Stream / Local HTTP Bridge (Port 3055)
 -- Plugin auto-connect saat dimuat, polling /api/ping lalu /api/stream
 -- untuk mendapatkan events (status, request) dari server Node.js.
 -- ══════════════════════════════════════════════════════════════════════
@@ -271,7 +271,7 @@ function startConnectionLoop()
 	reconnectDelay = RECONNECT_DELAY_INITIAL
 
 	if ui then
-		ui:addLog("[System] NVStudio MCP v2.1.2 — Menghubungkan ke server...", Color3.fromRGB(200, 200, 200))
+		ui:addLog("[System] NVStudio MCP v2.1.3 — Menghubungkan ke server...", Color3.fromRGB(200, 200, 200))
 	end
 
 	local consecutiveErrors = 0
