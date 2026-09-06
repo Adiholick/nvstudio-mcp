@@ -41,7 +41,7 @@ function buildRbxmx() {
     xml += `\t\t\t<bool name="DefinesCapabilities">false</bool>\n`;
     xml += `\t\t\t<string name="Name">nvstudio_mcp</string>\n`;
     xml += `\t\t\t<int64 name="SourceAssetId">-1</int64>\n`;
-    xml += `\t\t\t<SharedString name="Tags"></SharedString>\n`;
+    xml += `\t\t\t<BinaryString name="Tags"></BinaryString>\n`;
     xml += `\t\t</Properties>\n`;
 
     // Process files
@@ -67,7 +67,7 @@ function buildRbxmx() {
         xml += `\t\t\t\t<Content name="LinkedSource"><null></null></Content>\n`;
         xml += `\t\t\t\t<string name="Name">${scriptName}</string>\n`;
         xml += `\t\t\t\t<int64 name="SourceAssetId">-1</int64>\n`;
-        xml += `\t\t\t\t<SharedString name="Tags"></SharedString>\n`;
+        xml += `\t\t\t\t<BinaryString name="Tags"></BinaryString>\n`;
         
         if (isMain) {
             xml += `\t\t\t\t<token name="RunContext">0</token>\n`;

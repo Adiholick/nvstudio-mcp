@@ -8,7 +8,7 @@
 			<bool name="DefinesCapabilities">false</bool>
 			<string name="Name">nvstudio_mcp</string>
 			<int64 name="SourceAssetId">-1</int64>
-			<SharedString name="Tags"></SharedString>
+			<BinaryString name="Tags"></BinaryString>
 		</Properties>
 		<Item class="ModuleScript" referent="RBX_create_instance">
 			<Properties>
@@ -19,7 +19,7 @@
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">create_instance</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local success, config = pcall(function() return ctx.HttpService:JSONDecode(data) end)
     if not success or not config.ClassName then
@@ -56,7 +56,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">delete_instance</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     -- Guardrail: Cegah penghapusan Service utama
     local protectedServices = {
@@ -100,7 +100,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">execute_luau</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local code = data
     if not code or code == "" then
@@ -184,7 +184,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">generate_terrain</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local success, config = pcall(function() return ctx.HttpService:JSONDecode(data) end)
     if not success or not config.Size or not config.Position or not config.Material then
@@ -220,7 +220,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">get_children</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local children = {}
     for _, child in ipairs(targetInstance:GetChildren()) do
@@ -240,7 +240,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">get_logs</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     if #ctx.recentLogs == 0 then
         return { status = "success", result = {"Console kosong. Tidak ada error atau log terbaru."} }
@@ -260,7 +260,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">get_properties</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local CollectionService = game:GetService("CollectionService")
     
@@ -325,7 +325,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">get_script_source</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     if targetInstance:IsA("LuaSourceContainer") then
         return { status = "success", result = targetInstance.Source }
@@ -345,7 +345,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">insert_asset</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local InsertService = game:GetService("InsertService")
     local assetId = tonumber(data)
@@ -376,7 +376,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">Main</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<token name="RunContext">0</token>
 				<ProtectedString name="Source"><![CDATA[local HttpService = game:GetService("HttpService")
 local LogService = game:GetService("LogService")
@@ -700,7 +700,7 @@ end)
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">patch_script_source</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[local HttpService = game:GetService("HttpService")
 
 return function(targetInstance, data, ctx, targetPath)
@@ -810,7 +810,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">rollback_script</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     if targetInstance:IsA("LuaSourceContainer") then
         local prevSource = ctx.scriptHistory[targetPath]
@@ -836,7 +836,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">script_grep</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local query = tostring(data)
     if not query or query == "" then
@@ -912,7 +912,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">search_instance</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local searchName = tostring(data)
     local results = {}
@@ -945,7 +945,7 @@ end
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">ui_manager</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[local UIManager = {}
 local widget = nil
 
@@ -1401,7 +1401,7 @@ return UIManager
 				<Content name="LinkedSource"><null></null></Content>
 				<string name="Name">update_script_source</string>
 				<int64 name="SourceAssetId">-1</int64>
-				<SharedString name="Tags"></SharedString>
+				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     if targetInstance:IsA("LuaSourceContainer") then
         local newCode = data or ""
