@@ -3,7 +3,9 @@
   "version": "2.0.1",
   "description": "Local Bridge Server MCP for Roblox Studio",
   "main": "dist/index.js",
-  "bin": "dist/index.js",
+  "bin": {
+    "nvstudio-mcp": "./dist/index.js"
+  },
   "files": [
     "dist",
     "public",

@@ -8,9 +8,14 @@ Sistem ini didesain menggunakan **Hybrid Architecture** yang memisahkan logika E
 
 ## 📥 Instalasi
 
-Langkah instalasinya **sangat gampang!**
+Langkah instalasi dirancang **sangat mudah dan otomatis!**
 
-### 1. Jalankan Installer (Otomatis)
+> 💡 **Apakah perlu install plugin Roblox secara manual?**
+> **TIDAK PERLU.** Jika Anda menjalankan skrip installer di bawah (Langkah 1), installer akan **secara otomatis menyalin plugin (`nvstudio_mcp.rbxmx`)** langsung ke folder plugin Roblox Studio di sistem operasi Anda.
+
+---
+
+### Langkah 1: Jalankan Installer (Otomatis & Direkomendasikan)
 
 Pilih perintah sesuai terminal yang Anda gunakan:
 
@@ -24,25 +29,40 @@ irm https://raw.githubusercontent.com/Adiholick/nvstudio-mcp/main/install.ps1 | 
 curl -fsSL https://raw.githubusercontent.com/Adiholick/nvstudio-mcp/main/install.sh | bash
 ```
 
-
-**Installer ini akan secara otomatis melakukan hal berikut:**
-- Memasang dependensi Node.js dan melakukan kompilasi TypeScript (*Bridge Server*).
-- Menyalin file plugin `nvstudio_mcp.rbxmx` ke dalam sistem Plugin Roblox Studio di OS Anda (Windows/macOS/WSL) secara otomatis.
-- Mengintegrasikan *AI Agent Skills* langsung ke **Antigravity IDE** (`~/.gemini/config/plugins/nvstudio-mcp`).
-- Melakukan auto-konfigurasi JSON jika Anda menggunakan **Cursor Editor**.
-
-### 2. Mengaktifkan Izin di Roblox Studio
-1. Buka proyek game Anda di Roblox Studio.
-2. Di pojok kiri atas, buka **Home** -> **Game Settings** -> **Security**.
-3. Centang (aktifkan) opsi **`Allow HTTP Requests`** agar plugin dapat berkomunikasi dengan AI.
+**Apa saja yang dilakukan installer ini secara otomatis?**
+1. 📦 Mengunduh source code, memasang dependensi Node.js, dan mengkompilasi TypeScript (*Bridge Server*).
+2. 🧩 **Memasang Plugin Roblox Studio (`nvstudio_mcp.rbxmx`) otomatis** ke folder sistem Roblox Studio Anda (`%LOCALAPPDATA%\Roblox\Plugins` di Windows atau `~/Documents/ROBLOX/Plugins` di macOS).
+3. 🤖 Mengintegrasikan *AI Agent Skills* anti-halusinasi langsung ke **Antigravity IDE** (`~/.gemini/config/plugins/nvstudio-mcp`).
+4. ⚙️ Melakukan auto-konfigurasi jika mendeteksi editor **Cursor** (`.cursor/mcp.json`).
 
 ---
 
-## 🔌 Cara Menggunakan (Untuk AI Lain)
+### Langkah 2: Mengaktifkan Izin di Roblox Studio (Wajib)
 
-Jika Anda menggunakan AI Client lain (misalnya: **Claude Desktop** atau klien yang tidak dikonfigurasi otomatis), Anda dapat menambahkan `nvstudio-mcp` secara manual ke konfigurasi `mcp.json` Anda.
+Karena pembatasan keamanan bawaan Roblox Studio, akses HTTP harus diizinkan sekali per place/game:
+1. Buka game/place Anda di **Roblox Studio**.
+2. Di toolbar atas, buka tab **Home** ➔ **Game Settings** ➔ pilih menu **Security**.
+3. Centang (aktifkan) **`Allow HTTP Requests`**, lalu klik **Save**.
+4. **Auto-Detect Aktif!** Plugin Roblox Studio kini memiliki heartbeat pintar yang akan otomatis terhubung (*Auto-Connect*) segera setelah MCP server aktif — Anda tidak perlu lagi repot menekan tombol connect secara manual.
 
-Salin konfigurasi ini:
+---
+
+### 📂 Alternatif: Instalasi Plugin Secara Manual (Opsional)
+
+Jika Anda **tidak** menggunakan skrip installer otomatis di atas (misalnya hanya menambahkan server via `npx` di klien AI), pasang file plugin Roblox Studio secara manual:
+1. Ambil file `nvstudio_mcp.rbxmx` dari folder [studio-plugin/nvstudio_mcp.rbxmx](file:///studio-plugin/nvstudio_mcp.rbxmx).
+2. Pindahkan/salin file tersebut ke direktori plugin Roblox di komputer Anda:
+   - **Windows:** `%LOCALAPPDATA%\Roblox\Plugins` (atau `C:\Users\<Username>\AppData\Local\Roblox\Plugins`)
+   - **macOS:** `~/Documents/ROBLOX/Plugins`
+3. Restart atau buka kembali Roblox Studio. Plugin akan muncul di tab **Plugins**.
+
+---
+
+## 🔌 Cara Menggunakan (Konfigurasi MCP Klien AI)
+
+Jika Anda menggunakan AI Client lain seperti **Claude Desktop**, **Windsurf**, atau ingin menambahkan konfigurasi secara manual:
+
+Tambahkan konfigurasi berikut ke file `mcp.json` Anda:
 ```json
 {
   "mcpServers": {
@@ -56,7 +76,15 @@ Salin konfigurasi ini:
   }
 }
 ```
-*(Dengan ini, AI Anda akan selalu mengunduh dan menjalankan versi terbaru dari server Bridge langsung dari NPM, tanpa perlu path folder lokal!)*
+*(AI Anda akan selalu menjalankan versi terbaru dari server Bridge langsung dari NPM!)*
+
+---
+
+## 🖥️ Dashboard Visual & Fitur Pintar v2.0
+
+- **Visual Dashboard Real-time:** Buka [http://localhost:3055](http://localhost:3055) di browser Anda untuk melihat monitor antrean perintah, log aktivitas AI, status koneksi Studio, dan statistik eksekusi secara visual.
+- **Auto-Detect & Auto-Connect:** Plugin Roblox Studio otomatis menyambung ke server saat aktif dan kembali menunggu (*Waiting*) saat server mati tanpa interupsi manual.
+- **Anti-Zombie Port Handling:** Tidak perlu khawatir error `EADDRINUSE`. Jika port `3055` tertahan oleh proses zombie akibat restart editor/IDE, server akan otomatis membersihkan port tersebut secara aman.
 
 ---
 
