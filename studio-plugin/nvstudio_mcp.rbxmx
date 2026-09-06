@@ -604,12 +604,15 @@ local function handleSSELine(line)
 	-- status: update mcpConnected
 	if kind == "status" then
 		local newActive = decoded.mcpConnected == true
+		local changed = (mcpAgentActive ~= newActive)
 		mcpAgentActive = newActive
 		if ui then
 			-- Jaga status tetap Connected selama bridge server hidup
 			ui:setStatus("connected")
-			if newActive then
+			if newActive and changed then
 				ui:addLog("[System] ✅ IDE Agent (Antigravity) aktif.", Color3.fromRGB(100, 255, 100))
+			elseif not newActive and changed then
+				ui:addLog("[System] ⚠️ IDE Agent terputus.", Color3.fromRGB(255, 150, 50))
 			end
 		end
 		return

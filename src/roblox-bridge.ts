@@ -183,7 +183,7 @@ export function startBridgeServer(port: number = 3055) {
     io.on('connection', (socket) => {
         socket.emit('init', {
             logs: activityLogs,
-            stats: { totalTasks, successCount, errorCount, sessionStart, studioConnected: ssePeers.size > 0, port },
+            stats: { totalTasks, successCount, errorCount, sessionStart, studioConnected: Math.max(ssePeers.size, studioEventQueues.size) > 0, port },
         });
     });
 
