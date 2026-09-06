@@ -97,6 +97,27 @@ export function startBridgeServer(port: number = 3055) {
         res.json({ totalTasks, successCount, errorCount, sessionStart, studioConnected, port });
     });
 
+    // Endpoint Studio Instant Ping (Handshake cepat tanpa menunggu long-polling)
+    app.get('/api/ping', (req, res) => {
+        if (!studioConnected) {
+            studioConnected = true;
+            io.emit('studio-status', { connected: true });
+            addLog(io, 'system', 'Roblox Studio terhubung ke Bridge Server via Ping.');
+        }
+
+        if (!dashboardOpened) {
+            dashboardOpened = true;
+            const url = `http://localhost:${port}`;
+            const startCmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
+            exec(startCmd, (error) => {
+                if (error) console.error(`[Bridge] Gagal membuka browser:`, error);
+            });
+            console.error(`[Bridge] Pertama kali terhubung dengan Studio! Membuka Dashboard...`);
+        }
+
+        res.json({ status: 'ok', studioConnected: true, timestamp: Date.now() });
+    });
+
     const waitingPollers: express.Response[] = [];
 
     taskEmitter.on('new_task', () => {
