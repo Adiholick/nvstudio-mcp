@@ -40,8 +40,8 @@ local mcpAgentActive     = false  -- apakah Antigravity sedang konek ke MCP
 local serverReachable    = false  -- apakah server Node.js reachable
 
 -- Reconnect config
-local RECONNECT_DELAY_INITIAL = 1
-local RECONNECT_DELAY_MAX     = 15
+local RECONNECT_DELAY_INITIAL = 1.5
+local RECONNECT_DELAY_MAX     = 1.5
 local reconnectDelay          = RECONNECT_DELAY_INITIAL
 
 -- ── Skills (ModuleScript) ─────────────────────────────────────────────────────
@@ -314,13 +314,13 @@ function startConnectionLoop()
 					mcpAgentActive = false
 					if ui then
 						ui:setStatus("waiting")
-						ui:addLog("[System] ⚠️ Server MCP tidak dapat dijangkau. Retry dalam " .. reconnectDelay .. "s...", Color3.fromRGB(255, 150, 50))
+						ui:addLog("[System] ⚠️ Server MCP tidak dapat dijangkau. Mencoba menghubungkan ulang...", Color3.fromRGB(255, 150, 50))
 					end
 				end
 			end
 
 			task.wait(reconnectDelay)
-			reconnectDelay = math.min(reconnectDelay * 2, RECONNECT_DELAY_MAX)
+			reconnectDelay = RECONNECT_DELAY_MAX
 		end
 	end
 
