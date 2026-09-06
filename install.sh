@@ -66,40 +66,60 @@ fi
 
 # 5. Hybrid AI Installer
 echo "🤖 Menyiapkan AI Agent Plugin (Hybrid Method)..."
-ANTIGRAVITY_PLUGIN_DIR="$HOME/.gemini/config/plugins/nvstudio-mcp"
-ANTIGRAVITY_BASE="$HOME/.gemini/config/plugins"
 
-# A. Instalasi Bundle ke Antigravity
-if [ -d "$ANTIGRAVITY_BASE" ]; then
-    echo -e "   -> ${GREEN}Terdeteksi Antigravity IDE. Memasang AI Agent Plugin Bundle...${NC}"
-    mkdir -p "$ANTIGRAVITY_PLUGIN_DIR"
-    cp -R agent-plugin/* "$ANTIGRAVITY_PLUGIN_DIR/"
-    echo -e "${GREEN}✅ Bundle terpasang di $ANTIGRAVITY_PLUGIN_DIR${NC}"
-else
-    echo -e "   -> ${GRAY}Antigravity IDE tidak terdeteksi. Melewati instalasi bundle.${NC}"
-fi
+# Gunakan Node.js untuk dengan aman memperbarui file JSON mcp_config untuk Antigravity dan Cursor
+node --input-type=commonjs -e "
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
-# B. Auto-Configurator untuk editor lain (Misal Cursor) via node script sederhana
-echo "   -> Mengeksekusi injeksi MCP JSON (Cursor Auto-Configurator jika direktori .cursor ditemukan)..."
-node --input-type=commonjs -e '
-const fs = require("fs");
-const path = require("path");
-CURSOR_MCP="$HOME/.cursor/mcp.json"
-if [ -d "$HOME/.cursor" ]; then
-    # Buat atau update mcp.json untuk nvstudio-mcp
-    cat > "$CURSOR_MCP" << EOL
-{
-  "mcpServers": {
-    "nvstudio-mcp": {
-      "command": "npx",
-      "args": ["-y", "@adiholick/nvstudio-mcp@latest"]
+const homeDir = os.homedir();
+const installDir = path.join(homeDir, '.nvstudio-mcp');
+
+// A. Antigravity IDE Global Config
+const antigravityConfigDir = path.join(homeDir, '.gemini', 'config');
+const antigravityMcpFile = path.join(antigravityConfigDir, 'mcp_config.json');
+
+if (fs.existsSync(antigravityConfigDir)) {
+    console.log('   -> Terdeteksi Antigravity IDE. Mendaftarkan MCP Server secara global...');
+    let config = { mcpServers: {} };
+    if (fs.existsSync(antigravityMcpFile)) {
+        try {
+            config = JSON.parse(fs.readFileSync(antigravityMcpFile, 'utf8'));
+        } catch(e) {}
     }
-  }
+    if (!config.mcpServers) config.mcpServers = {};
+    config.mcpServers['nvstudio-mcp'] = {
+        command: process.execPath,
+        args: [path.join(installDir, 'dist', 'index.js').replace(/\\\\/g, '/')]
+    };
+    fs.writeFileSync(antigravityMcpFile, JSON.stringify(config, null, 2), 'utf8');
+    console.log('   ✅ NVStudio MCP terdaftar di konfigurasi global Antigravity');
+} else {
+    console.log('   -> Antigravity IDE tidak terdeteksi. Melewati registrasi Antigravity.');
 }
-EOL
-    echo -e "${GREEN}✅ Berhasil menginjeksi konfigurasi ke $CURSOR_MCP${NC}"
-fi
 
+// B. Auto-Configurator untuk Cursor
+const cursorDir = path.join(homeDir, '.cursor');
+const cursorMcpFile = path.join(cursorDir, 'mcp.json');
+
+if (fs.existsSync(cursorDir)) {
+    console.log('   -> Mengeksekusi injeksi MCP JSON untuk Cursor...');
+    let config = { mcpServers: {} };
+    if (fs.existsSync(cursorMcpFile)) {
+        try {
+            config = JSON.parse(fs.readFileSync(cursorMcpFile, 'utf8'));
+        } catch(e) {}
+    }
+    if (!config.mcpServers) config.mcpServers = {};
+    config.mcpServers['nvstudio-mcp'] = {
+        command: 'npx',
+        args: ['-y', '@adiholick/nvstudio-mcp@latest']
+    };
+    fs.writeFileSync(cursorMcpFile, JSON.stringify(config, null, 2), 'utf8');
+    console.log('   ✅ Berhasil menginjeksi konfigurasi ke .cursor/mcp.json');
+}
+"
 # 6. Output Konfigurasi Selesai
 echo ""
 echo -e "${GREEN}🎉 Instalasi nvstudio-mcp Selesai!${NC}"

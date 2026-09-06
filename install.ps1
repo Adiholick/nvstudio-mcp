@@ -68,30 +68,38 @@ if (Test-Path $PluginSourceX) {
 
 # 5. Hybrid AI Installer (Antigravity & Cursor)
 Write-Host "[*] Menyiapkan AI Agent Plugin (Hybrid Method)..." -ForegroundColor Cyan
-$AntigravityBase = Join-Path $HOME ".gemini\config\plugins"
-$AntigravityPluginDir = Join-Path $AntigravityBase "nvstudio-mcp"
+$AntigravityConfigDir = Join-Path $HOME ".gemini\config"
+$AntigravityGlobalMcpFile = Join-Path $AntigravityConfigDir "mcp_config.json"
 
-if (Test-Path $AntigravityBase) {
-    Write-Host "   -> Terdeteksi Antigravity IDE. Memasang AI Agent Plugin Bundle..." -ForegroundColor Green
-    if (-not (Test-Path $AntigravityPluginDir)) {
-        New-Item -ItemType Directory -Force -Path $AntigravityPluginDir | Out-Null
-    }
-    Copy-Item -Recurse -Force (Join-Path $InstallDir "agent-plugin\*") $AntigravityPluginDir
+if (Test-Path $AntigravityConfigDir) {
+    Write-Host "   -> Terdeteksi Antigravity IDE. Mendaftarkan MCP Server secara global..." -ForegroundColor Green
     
-    # Konfigurasi mcp_config.json agar langsung menggunakan hasil kompilasi lokal
-    $AntigravityMcpFile = Join-Path $AntigravityPluginDir "mcp_config.json"
-    $NodeExe = (Get-Command node).Source.Replace("\", "/")
-    $DistJs = (Join-Path $InstallDir "dist\index.js").Replace("\", "/")
-    $McpConfig = @{
-        "mcpServers" = @{
-            "nvstudio-mcp" = @{
-                "command" = $NodeExe;
-                "args" = @($DistJs)
-            }
+    $GlobalConfig = @{ "mcpServers" = @{} }
+    if (Test-Path $AntigravityGlobalMcpFile) {
+        try {
+            $GlobalConfig = Get-Content $AntigravityGlobalMcpFile -Raw | ConvertFrom-Json -AsHashtable
+        } catch {
+            $GlobalConfig = @{ "mcpServers" = @{} }
         }
     }
-    $McpConfig | ConvertTo-Json -Depth 5 | Set-Content $AntigravityMcpFile -Encoding UTF8
-    Write-Host "[OK] Bundle terpasang di $AntigravityPluginDir" -ForegroundColor Green
+    
+    if (-not $GlobalConfig.ContainsKey("mcpServers") -or $GlobalConfig["mcpServers"] -eq $null) {
+        $GlobalConfig["mcpServers"] = @{}
+    }
+    
+    $NodeExe = "node"
+    if (Get-Command node -ErrorAction SilentlyContinue) {
+        $NodeExe = (Get-Command node).Source.Replace("\", "/")
+    }
+    $DistJs = (Join-Path $InstallDir "dist\index.js").Replace("\", "/")
+    
+    $GlobalConfig["mcpServers"]["nvstudio-mcp"] = @{
+        "command" = $NodeExe;
+        "args" = @($DistJs)
+    }
+    
+    $GlobalConfig | ConvertTo-Json -Depth 5 | Set-Content $AntigravityGlobalMcpFile -Encoding UTF8
+    Write-Host "[OK] NVStudio MCP terdaftar di konfigurasi global Antigravity ($AntigravityGlobalMcpFile)" -ForegroundColor Green
 } else {
     Write-Host "   -> Antigravity IDE tidak terdeteksi. Melewati instalasi bundle." -ForegroundColor Gray
 }
