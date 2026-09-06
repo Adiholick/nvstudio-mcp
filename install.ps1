@@ -88,9 +88,6 @@ if (Test-Path $AntigravityConfigDir) {
     }
     
     $NodeExe = "node"
-    if (Get-Command node -ErrorAction SilentlyContinue) {
-        $NodeExe = (Get-Command node).Source.Replace("\", "/")
-    }
     $DistJs = (Join-Path $InstallDir "dist\index.js").Replace("\", "/")
     
     $GlobalConfig["mcpServers"]["nvstudio-mcp"] = @{
