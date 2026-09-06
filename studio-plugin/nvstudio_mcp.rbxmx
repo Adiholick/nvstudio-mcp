@@ -378,179 +378,136 @@ end
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 				<token name="RunContext">0</token>
-				<ProtectedString name="Source"><![CDATA[local HttpService = game:GetService("HttpService")
-local LogService = game:GetService("LogService")
+				<ProtectedString name="Source"><![CDATA[-- ══════════════════════════════════════════════════════════════════════
+-- NVStudio MCP Plugin v2.1.0
+-- Arsitektur: SSE (Server-Sent Events) via WebStreamClient
+-- Plugin membuka koneksi stream persisten ke server Node.js.
+-- Server PUSH task langsung — tidak ada polling loop.
+-- ══════════════════════════════════════════════════════════════════════
 
-local PING_URL = "http://localhost:3055/api/ping"
-local TASK_URL = "http://localhost:3055/api/tasks"
-local RESPONSE_URL = "http://localhost:3055/api/response"
+local HttpService    = game:GetService("HttpService")
+local LogService     = game:GetService("LogService")
 
--- Generate Unique Studio ID (menghindari bentrok jika 2 Studio terbuka)
-local STUDIO_ID = HttpService:GenerateGUID(false)
+-- URL Endpoints
+local BASE_URL       = "http://localhost:3055"
+local STREAM_URL     = BASE_URL .. "/api/stream"
+local RESPONSE_URL   = BASE_URL .. "/api/response"  -- /api/response/:taskId via POST
+local PING_URL       = BASE_URL .. "/api/ping"
 
--- Import UI Manager (Procedural Dashboard)
+-- ID unik per sesi Studio (jika dua Studio terbuka, keduanya didaftarkan terpisah)
+local STUDIO_ID      = HttpService:GenerateGUID(false)
+
+-- ── UI Module ──────────────────────────────────────────────────────────────────
 local uiModule = script.Parent:FindFirstChild("ui_manager")
 local ui = nil
 
--- Membangun Tombol Toolbar (Toggle)
-local toolbar = plugin:CreateToolbar("NVStudio MCP")
+-- ── Toolbar ───────────────────────────────────────────────────────────────────
+local toolbar   = plugin:CreateToolbar("NVStudio MCP")
 local toggleBtn = toolbar:CreateButton("Dashboard", "Buka Dashboard NVStudio MCP", "rbxassetid://82696893597722", "NVStudio")
 
--- Global State & Context AI
+-- ── State ─────────────────────────────────────────────────────────────────────
 local ctx = {
     scriptHistory = {},
-    recentLogs = {},
-    HttpService = HttpService,
-    studioId = STUDIO_ID
+    recentLogs    = {},
+    HttpService   = HttpService,
+    studioId      = STUDIO_ID,
 }
-local MAX_LOGS = 50
-local isConnected = false
-local savedAutoConnect = plugin:GetSetting("AutoConnect")
-local autoConnect = (savedAutoConnect == nil) and true or savedAutoConnect
-local isPolling = false
-local isManualDisconnect = false -- Mencegah auto-reconnect saat user sengaja disconnect
-local isClickDebounce = false -- Mencegah rapid double-click
+local MAX_LOGS          = 50
+local isConnected       = false   -- apakah SSE stream aktif
+local mcpAgentActive    = false   -- apakah Antigravity/Cursor sedang konek ke MCP
+local isManualDisconnect = false
+local isClickDebounce   = false
+local currentStream     = nil     -- WebStreamClient aktif
+local streamConnections = {}      -- RBXScriptConnection SSE
 
--- Deklarasi fungsi polling di awal agar bisa dipanggil oleh UI
-local startPolling
-local stopPolling
+-- Reconnect config (exponential backoff)
+local RECONNECT_DELAY_INITIAL = 0.5
+local RECONNECT_DELAY_MAX     = 10
+local reconnectDelay          = RECONNECT_DELAY_INITIAL
 
--- Inisialisasi UI jika modul ditemukan
+-- ── Skills (ModuleScript) ─────────────────────────────────────────────────────
+local skills = {}
+for _, module in ipairs(script.Parent:GetChildren()) do
+    if module:IsA("ModuleScript") and module.Name ~= "ui_manager" then
+        local ok, result = pcall(require, module)
+        if ok then
+            skills[module.Name] = result
+        else
+            warn("[NVStudio] Gagal load module '" .. module.Name .. "': " .. tostring(result))
+        end
+    end
+end
+
+-- ── Inisialisasi UI ──────────────────────────────────────────────────────────
 if uiModule then
     local UIManager = require(uiModule)
     ui = UIManager.init(plugin, STUDIO_ID)
-    
-    -- Sync Initial State ke UI
-    ui:setAutoConnectState(autoConnect)
-    if autoConnect then
-        ui:setStatus("waiting")
-    else
-        ui:setStatus("disconnected")
-    end
-    
-    -- Sync state tombol toolbar dengan status widget
+
+    ui:setAutoConnectState(true)
+    ui:setStatus("waiting")
+
     if ui.widget then
         toggleBtn:SetActive(ui.widget.Enabled)
         ui.widget:GetPropertyChangedSignal("Enabled"):Connect(function()
             toggleBtn:SetActive(ui.widget.Enabled)
         end)
     end
-    
-    -- Event Toggle GUI Panel
+
     toggleBtn.Click:Connect(function()
         ui:toggleVisibility()
     end)
-    
-    -- Event Tombol Connect (dengan debounce untuk mencegah double-click)
+
+    -- Tombol Connect / Disconnect
     ui.connectBtn.MouseButton1Click:Connect(function()
         if isClickDebounce then return end
         isClickDebounce = true
-        
+
         if not isConnected then
-            -- CONNECT (manual) — reset manual disconnect flag agar auto-detect bisa bekerja
             isManualDisconnect = false
+            reconnectDelay = RECONNECT_DELAY_INITIAL
             ui:setStatus("waiting")
-            ui:addLog("[System] Menghubungkan ke Server MCP...", Color3.fromRGB(255, 220, 100))
-            
-            task.spawn(function()
-                local cacheBuster = "?t=" .. tostring(os.clock())
-                local success, _ = pcall(function()
-                    return HttpService:GetAsync(PING_URL .. cacheBuster)
-                end)
-                
-                isConnected = true
-                if success then
-                    if ui then
-                        ui:setStatus("connected")
-                        ui:addLog("[System] Berhasil terhubung ke Server MCP!", Color3.fromRGB(100, 255, 100))
-                    end
-                else
-                    if ui then
-                        ui:setStatus("waiting")
-                        ui:addLog("[System] Server MCP belum aktif di port 3055. Menunggu koneksi...", Color3.fromRGB(255, 200, 100))
-                    end
-                end
-                startPolling()
-            end)
+            ui:addLog("[System] Menghubungkan ulang ke Server MCP...", Color3.fromRGB(255, 220, 100))
+            task.spawn(connectSSE)
         else
-            -- DISCONNECT — hentikan polling dan tandai manual disconnect
-            stopPolling()
+            isManualDisconnect = true
+            disconnectSSE()
             ui:setStatus("disconnected")
             ui:addLog("[System] Koneksi dihentikan oleh pengguna.", Color3.fromRGB(255, 100, 100))
         end
-        
-        task.delay(0.3, function()
-            isClickDebounce = false
-        end)
-    end)
-    
-    -- Event Custom Checkbox (Auto-Connect)
-    ui.autoConnectBtn.MouseButton1Click:Connect(function()
-        autoConnect = not autoConnect
-        plugin:SetSetting("AutoConnect", autoConnect)
-        ui:setAutoConnectState(autoConnect)
-        ui:addLog("[System] Preferensi Auto-Connect disimpan: " .. tostring(autoConnect), Color3.fromRGB(200, 200, 255))
+
+        task.delay(0.3, function() isClickDebounce = false end)
     end)
 else
-    -- Fallback aman jika pengguna lupa meng-copy ui_manager.lua
     toggleBtn.Click:Connect(function()
-        print("[NVStudio MCP] ERROR: Modul 'ui_manager' tidak ditemukan di dalam Folder. GUI Gagal dimuat!")
+        print("[NVStudio MCP] ERROR: Modul 'ui_manager' tidak ditemukan. GUI gagal dimuat!")
     end)
 end
 
--- Handler Output Studio (Untuk AI dan GUI)
+-- ── Log Capture ──────────────────────────────────────────────────────────────
 local function addSystemLog(msg, msgType)
-    local color = Color3.fromRGB(200, 200, 200)
+    local color  = Color3.fromRGB(200, 200, 200)
     local prefix = "[INFO] "
     if msgType == Enum.MessageType.MessageError then
-        prefix = "[ERROR] "
-        color = Color3.fromRGB(255, 100, 100)
+        prefix = "[ERROR] "; color = Color3.fromRGB(255, 100, 100)
     elseif msgType == Enum.MessageType.MessageWarning then
-        prefix = "[WARN] "
-        color = Color3.fromRGB(255, 200, 100)
+        prefix = "[WARN] ";  color = Color3.fromRGB(255, 200, 100)
     end
-    
     local fullMsg = prefix .. msg
-    
-    -- 1. Simpan di memori untuk disedot AI
     table.insert(ctx.recentLogs, fullMsg)
-    if #ctx.recentLogs > MAX_LOGS then
-        table.remove(ctx.recentLogs, 1)
-    end
-    
-    -- 2. Cetak ke Terminal GUI Plugin
-    if ui then
-        ui:addLog(fullMsg, color)
-    end
+    if #ctx.recentLogs > MAX_LOGS then table.remove(ctx.recentLogs, 1) end
+    if ui then ui:addLog(fullMsg, color) end
 end
-
--- Ikat listener output
 LogService.MessageOut:Connect(addSystemLog)
 
--- Memuat semua module skills secara dinamis
-local skills = {}
-for _, module in ipairs(script.Parent:GetChildren()) do
-    if module:IsA("ModuleScript") and module.Name ~= "ui_manager" then
-        skills[module.Name] = require(module)
-    end
-end
-
--- Fungsi Helper Pathing
+-- ── Helper: Resolve path ke Instance ─────────────────────────────────────────
 local function getInstanceFromPath(pathString)
-    local parts = string.split(pathString, ".")
+    local parts   = string.split(pathString, ".")
     local current = game
-    
     if parts[1] == "game" then table.remove(parts, 1) end
-    
-    -- Handle common Services directly to ensure reliability
     pcall(function()
         local svc = game:GetService(parts[1])
-        if svc then
-            current = svc
-            table.remove(parts, 1)
-        end
+        if svc then current = svc; table.remove(parts, 1) end
     end)
-    
     for _, part in ipairs(parts) do
         local found = current:FindFirstChild(part)
         if not found then return nil end
@@ -559,157 +516,259 @@ local function getInstanceFromPath(pathString)
     return current
 end
 
--- Memproses Task Eksekusi dari AI
+-- ── Proses Task dari Server ───────────────────────────────────────────────────
 local function processTask(taskData)
     if not taskData or not taskData.id or not taskData.command then return nil end
-    
-    if ui then 
-        ui:addLog("[AI Command] Menerima instruksi: " .. taskData.command, Color3.fromRGB(150, 200, 255)) 
+
+    if ui then
+        ui:addLog("[AI Command] " .. taskData.command, Color3.fromRGB(150, 200, 255))
     end
-    
+
     local targetInstance = getInstanceFromPath(taskData.target)
     if not targetInstance then
-        return {
-            id = taskData.id,
-            status = "error",
-            error = "Target path tidak ditemukan: " .. taskData.target
-        }
+        return { id = taskData.id, status = "error", error = "Target path tidak ditemukan: " .. tostring(taskData.target) }
     end
 
     local skillFunc = skills[taskData.command]
     if not skillFunc then
-        return {
-            id = taskData.id,
-            status = "error",
-            error = "Command tidak dikenali oleh Studio: " .. taskData.command
-        }
+        return { id = taskData.id, status = "error", error = "Command tidak dikenali: " .. taskData.command }
     end
 
-    -- Eksekusi skill AI
     local result = skillFunc(targetInstance, taskData.data, ctx, taskData.target)
-    result.id = taskData.id
-    
-    -- Cetak hasil eksekusi ke Terminal GUI
+    result.id    = taskData.id
+
     if ui then
         local color = result.status == "success" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
         ui:addLog("[AI Result] " .. tostring(result.result or result.error), color)
     end
-    
+
     return result
 end
 
--- Menghentikan polling dengan bersih (dipanggil oleh tombol Disconnect)
-function stopPolling()
-    isConnected = false
-    isManualDisconnect = true
-    -- isPolling akan menjadi false secara otomatis saat loop keluar
-end
-
--- Background Polling Loop (Dapat dihentikan oleh user)
-function startPolling()
-    if isPolling then return end
-    isPolling = true
-    if ui and isConnected then ui:setStatus("connected") end
-    
+-- ── Kirim Respons ke Server ───────────────────────────────────────────────────
+local function sendResponse(taskId, resultData)
     task.spawn(function()
-        while isConnected do
-            local success, response = pcall(function()
-                -- Tambahkan cache-buster agar Studio tidak me-cache response HTTP
-                local cacheBuster = "?t=" .. tostring(os.clock())
-                return HttpService:GetAsync(TASK_URL .. cacheBuster)
+        local ok, err = pcall(function()
+            local json = HttpService:JSONEncode(resultData)
+            -- Coba endpoint baru dulu (/api/response/:taskId), fallback ke lama
+            local success = pcall(function()
+                HttpService:PostAsync(
+                    RESPONSE_URL .. "/" .. taskId,
+                    json,
+                    Enum.HttpContentType.ApplicationJson
+                )
             end)
-
-            -- PENTING: Cek ulang isConnected SETELAH HTTP request selesai.
-            if not isConnected then
-                break
+            if not success then
+                HttpService:PostAsync(RESPONSE_URL, json, Enum.HttpContentType.ApplicationJson)
             end
-
-            if success and response then
-                -- JIKA PING/POLL SUKSES, Node.js menyala (IDE / Agen Sedang Terbuka!)
-                if ui then ui:setStatus("connected") end
-
-                local decodeSuccess, taskData = pcall(function()
-                    return HttpService:JSONDecode(response)
-                end)
-                
-                if decodeSuccess and taskData and taskData.id then
-                    local resultData = processTask(taskData)
-                    if resultData then
-                        pcall(function()
-                            local jsonResult = HttpService:JSONEncode(resultData)
-                            HttpService:PostAsync(RESPONSE_URL, jsonResult, Enum.HttpContentType.ApplicationJson)
-                        end)
-                    end
-                end
-                
-                -- Fast-polling (long-polling yield di server Node.js)
-                -- 50ms untuk safety mencegah Studio Engine freeze jika Node.js membalas instant
-                task.wait(0.05)
-            else
-                -- Fetch gagal (Node.js server mati karena IDE/Antigravity/Cursor ditutup)
-                if ui then ui:setStatus("waiting") end
-                task.wait(1.5)
-            end
-            
-            -- Cek lagi sebelum sleep (agar disconnect lebih responsif)
-            if not isConnected then
-                break
-            end
+        end)
+        if not ok and ui then
+            ui:addLog("[System] Gagal kirim response: " .. tostring(err), Color3.fromRGB(255, 100, 100))
         end
-        isPolling = false
     end)
 end
 
--- ══════════════════════════════════════════════════════════════════════
--- AUTO-DETECT: Background heartbeat yang SELALU berjalan.
--- Mendeteksi apakah server MCP aktif setiap 1.5 detik via PING_URL.
--- Menggunakan /api/ping agar instan (tidak tertahan 20 detik oleh long-poll).
--- ══════════════════════════════════════════════════════════════════════
-task.spawn(function()
-    task.wait(0.5) -- Tunggu sebentar agar UI siap
-    
-    if ui then
-        ui:addLog("[System] Plugin termuat. Auto-detect server MCP aktif...", Color3.fromRGB(200, 200, 200))
+-- ── Proses satu baris data SSE ────────────────────────────────────────────────
+local function handleSSEMessage(rawMessage)
+    -- Strip prefix "data: " jika ada (beberapa Studio version memberikannya)
+    local payload = rawMessage
+    local normalized = rawMessage:gsub("\r\n", "\n"):gsub("\r", "\n")
+    if normalized:sub(1, 5) == "data:" then
+        payload = normalized:sub(6):gsub("^%s+", ""):gsub("%s+$", "")
     end
-    
-    while true do
-        -- Hanya jalankan auto-detect jika user tidak sengaja menekan Disconnect
-        if not isManualDisconnect and (autoConnect or isConnected) then
-            if not isPolling then
-                local success, _ = pcall(function()
-                    local cacheBuster = "?t=" .. tostring(os.clock())
-                    return HttpService:GetAsync(PING_URL .. cacheBuster)
-                end)
-                
-                if success then
-                    -- Server terdeteksi aktif via Ping!
-                    if not isConnected then
-                        isConnected = true
-                        if ui then
-                            ui:setStatus("connected")
-                            ui:addLog("[System] Server MCP terdeteksi! Terhubung otomatis.", Color3.fromRGB(100, 255, 100))
-                        end
-                        startPolling()
-                    else
-                        startPolling()
-                    end
+    if payload == "" then return end
+
+    local ok, decoded = pcall(function() return HttpService:JSONDecode(payload) end)
+    if not ok or type(decoded) ~= "table" then return end
+
+    local kind = decoded.kind
+
+    -- ── heartbeat ────────────────────────────────────────────────────
+    if kind == "heartbeat" then
+        -- Server masih hidup, tidak perlu tindakan khusus
+        return
+    end
+
+    -- ── status ───────────────────────────────────────────────────────
+    if kind == "status" then
+        local newMcpActive = decoded.mcpConnected == true
+        if newMcpActive ~= mcpAgentActive then
+            mcpAgentActive = newMcpActive
+            if ui then
+                if mcpAgentActive then
+                    ui:setStatus("connected")
+                    ui:addLog("[System] IDE Agent (Antigravity/Cursor) terhubung ke MCP.", Color3.fromRGB(100, 255, 100))
                 else
-                    -- Server tidak aktif / belum menyala
-                    if isConnected then
-                        isConnected = false
-                        if ui then
-                            ui:setStatus("waiting")
-                            ui:addLog("[System] Server MCP terputus. Menunggu reconnect...", Color3.fromRGB(255, 200, 100))
-                        end
-                    elseif ui and ui.status ~= "waiting" and not isManualDisconnect then
-                        ui:setStatus("waiting")
-                    end
+                    ui:setStatus("waiting")
+                    ui:addLog("[System] IDE Agent terputus dari MCP.", Color3.fromRGB(255, 200, 100))
                 end
             end
         end
-        
-        task.wait(1.5)
+        return
     end
+
+    -- ── request (task dari AI agent) ─────────────────────────────────
+    if kind == "request" then
+        local taskId  = decoded.requestId
+        local command = decoded.command
+        local target  = decoded.target
+        local data    = decoded.data
+
+        if not taskId or not command then return end
+
+        -- Proses task di coroutine terpisah agar tidak memblokir stream
+        task.spawn(function()
+            local resultData = processTask({
+                id      = taskId,
+                command = command,
+                target  = target or "",
+                data    = data,
+            })
+            if resultData then
+                sendResponse(taskId, resultData)
+            end
+        end)
+        return
+    end
+end
+
+-- ── Tutup SSE stream yang aktif ───────────────────────────────────────────────
+function disconnectSSE()
+    isConnected = false
+    for _, conn in ipairs(streamConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    streamConnections = {}
+    if currentStream then
+        pcall(function() currentStream:Close() end)
+        currentStream = nil
+    end
+end
+
+-- ── Buka SSE stream baru ──────────────────────────────────────────────────────
+function connectSSE()
+    if isConnected then return end
+    disconnectSSE() -- Bersihkan sisa koneksi lama
+
+    local url = STREAM_URL .. "?studioId=" .. HttpService:UrlEncode(STUDIO_ID)
+
+    local ok, streamOrErr = pcall(function()
+        return HttpService:GetAsync(url, false) -- Gunakan non-cached request
+    end)
+
+    -- WebStreamClient hanya tersedia di Studio; GetAsync biasa tidak akan
+    -- mempertahankan koneksi. Kita butuh WebStreamClient khusus.
+    -- Coba via WebStreamClient API:
+    local streamOk, stream = pcall(function()
+        -- @ts-ignore – WebStreamClient mungkin belum ada di semua versi Studio
+        return (HttpService :: any):WebStream(url)
+    end)
+
+    if not streamOk or not stream then
+        -- Fallback: Studio tidak mendukung WebStreamClient → gunakan polling biasa
+        if ui then
+            ui:addLog("[System] WebStreamClient tidak tersedia. Menggunakan polling fallback.", Color3.fromRGB(255, 200, 100))
+        end
+        task.spawn(fallbackPolling)
+        return
+    end
+
+    currentStream = stream
+    isConnected   = true
+    reconnectDelay = RECONNECT_DELAY_INITIAL
+
+    if ui then
+        ui:setStatus("waiting") -- Menunggu status mcpConnected dari server
+        ui:addLog("[System] SSE stream terbuka. Menunggu IDE Agent...", Color3.fromRGB(100, 200, 255))
+    end
+
+    -- Event: pesan masuk dari SSE stream
+    local onMessage = stream.OnMessage:Connect(function(message)
+        handleSSEMessage(message)
+    end)
+    table.insert(streamConnections, onMessage)
+
+    -- Event: stream ditutup (server restart / network drop)
+    local onClose = stream.OnClose:Connect(function()
+        isConnected    = false
+        mcpAgentActive = false
+        currentStream  = nil
+        streamConnections = {}
+        if ui then
+            ui:setStatus("waiting")
+            ui:addLog("[System] SSE stream terputus. Reconnect dalam " .. reconnectDelay .. "s...", Color3.fromRGB(255, 200, 100))
+        end
+        if not isManualDisconnect then
+            task.delay(reconnectDelay, connectSSE)
+            reconnectDelay = math.min(reconnectDelay * 2, RECONNECT_DELAY_MAX)
+        end
+    end)
+    table.insert(streamConnections, onClose)
+end
+
+-- ── Fallback: HTTP Polling (jika WebStreamClient tidak tersedia) ──────────────
+-- Digunakan pada versi Studio lama yang belum mendukung WebStreamClient.
+local isPollingActive = false
+function fallbackPolling()
+    if isPollingActive then return end
+    isPollingActive = true
+    isConnected     = true
+
+    if ui then
+        ui:setStatus("waiting")
+        ui:addLog("[System] Mode Polling aktif (WebStreamClient tidak didukung).", Color3.fromRGB(200, 200, 100))
+    end
+
+    while isConnected and not isManualDisconnect do
+        -- Ping
+        local pingOk, _ = pcall(function()
+            return HttpService:GetAsync(PING_URL .. "?studioId=" .. STUDIO_ID .. "&t=" .. tostring(os.clock()))
+        end)
+
+        if pingOk then
+            if ui then ui:setStatus("connected") end
+
+            -- Long-poll tasks
+            local taskOk, taskResponse = pcall(function()
+                return HttpService:GetAsync(BASE_URL .. "/api/tasks?t=" .. tostring(os.clock()))
+            end)
+
+            if taskOk and taskResponse then
+                local decodeOk, taskData = pcall(function() return HttpService:JSONDecode(taskResponse) end)
+                if decodeOk and taskData and taskData.id then
+                    local resultData = processTask(taskData)
+                    if resultData then
+                        sendResponse(taskData.id, resultData)
+                    end
+                end
+            end
+            task.wait(0.1)
+        else
+            if ui then ui:setStatus("waiting") end
+            task.wait(1.5)
+        end
+    end
+
+    isPollingActive = false
+end
+
+-- ── Plugin Unloading ──────────────────────────────────────────────────────────
+plugin.Unloading:Connect(function()
+    isManualDisconnect = true
+    disconnectSSE()
+end)
+
+-- ══════════════════════════════════════════════════════════════════════
+-- STARTUP: Langsung buka SSE stream
+-- ══════════════════════════════════════════════════════════════════════
+task.spawn(function()
+    task.wait(0.5) -- Tunggu UI siap
+
+    if ui then
+        ui:addLog("[System] NVStudio MCP v2.1.0 termuat. Membuka SSE stream...", Color3.fromRGB(200, 200, 200))
+    end
+
+    connectSSE()
 end)
 ]]></ProtectedString>
 			</Properties>

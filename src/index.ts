@@ -5,7 +5,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { startBridgeServer } from "./roblox-bridge";
+import { startBridgeServer, isBridgeHosting, setMcpConnected } from "./roblox-bridge";
 import { addTaskToQueue } from "./task-queue";
 import fs from 'fs';
 import path from 'path';
@@ -23,6 +23,8 @@ function backupScript(target: string, code: string) {
     fs.writeFileSync(path.join(HISTORY_DIR, fileName), code);
 }
 
+const isDaemon = process.argv.includes('--daemon') || process.argv.includes('-d');
+
 // 1. Impor dan jalankan server Express lokal di port 3055
 startBridgeServer(3055);
 
@@ -30,7 +32,7 @@ startBridgeServer(3055);
 const server = new Server(
   {
     name: "nvstudio-mcp",
-    version: "2.0.4",
+    version: "2.1.0",
   },
   {
     capabilities: {
@@ -152,13 +154,47 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  // 8. Teruskan ke antrean dan kembalikan hasilnya sebagai string JSON
+  // 8. Teruskan ke antrean tugas
   try {
     if (command === "update_script_source" && data) {
       backupScript(target, String(data));
     }
 
-    const result = await addTaskToQueue(command, target, data);
+    let result: any;
+    if (isBridgeHosting) {
+      // Instance ini sendiri yang meng-host bridge server
+      result = await addTaskToQueue(command, target, data);
+    } else {
+      // Bridge server aktif di proses background lain (port 3055)
+      let forwardedToBridge = false;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 35000);
+        const bridgeRes = await fetch("http://localhost:3055/api/tasks/enqueue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command, target, data }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (bridgeRes.ok) {
+          forwardedToBridge = true;
+          const bridgeJson = await bridgeRes.json() as any;
+          if (bridgeJson.status === "error") {
+            throw new Error(bridgeJson.error);
+          }
+          result = bridgeJson.result;
+        }
+      } catch (err: any) {
+        if (forwardedToBridge) {
+          throw err;
+        }
+        // Fallback in-process jika HTTP gagal dihubungi
+        result = await addTaskToQueue(command, target, data);
+      }
+    }
+
     return {
       content: [
         {
@@ -183,16 +219,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// 8. Jalankan koneksi MCP menggunakan StdioServerTransport
+// 8. Jalankan koneksi MCP menggunakan StdioServerTransport (hanya jika bukan mode Daemon)
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[nvstudio-mcp] MCP Server aktif melalui StdioServerTransport.");
 
+  // Beritahu SSE plugin bahwa MCP agent sekarang aktif
+  setMcpConnected(true);
+
   let isShuttingDown = false;
   const shutdown = () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
+    setMcpConnected(false); // Beritahu SSE plugin bahwa MCP agent sudah menutup koneksi
     console.error("[nvstudio-mcp] Koneksi ditutup oleh IDE. Mematikan server...");
     process.exit(0);
   };
@@ -203,7 +243,6 @@ async function main() {
   process.stdin.on('error', shutdown);
 
   // Fallback khusus Windows: cek apakah stdin masih readable secara berkala
-  // process.kill(ppid, 0) tidak reliable di Windows, jadi kita pakai cara ini
   setInterval(() => {
     if (!process.stdin.readable) {
       console.error("[nvstudio-mcp] stdin tidak readable lagi. IDE kemungkinan sudah ditutup.");
@@ -212,7 +251,13 @@ async function main() {
   }, 3000);
 }
 
-main().catch((err) => {
-  console.error("[nvstudio-mcp] Gagal menjalankan MCP server:", err);
-  process.exit(1);
-});
+if (isDaemon) {
+  console.error("[nvstudio-mcp] Berjalan dalam mode DAEMON (Background Bridge Server di port 3055).");
+  process.on('SIGINT', () => process.exit(0));
+  process.on('SIGTERM', () => process.exit(0));
+} else {
+  main().catch((err) => {
+    console.error("[nvstudio-mcp] Gagal menjalankan MCP server:", err);
+    process.exit(1);
+  });
+}
