@@ -41,7 +41,7 @@ function buildRbxmx() {
     xml += `\t\t\t<bool name="DefinesCapabilities">false</bool>\n`;
     xml += `\t\t\t<string name="Name">nvstudio_mcp</string>\n`;
     xml += `\t\t\t<int64 name="SourceAssetId">-1</int64>\n`;
-    xml += `\t\t\t<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>\n`;
+    xml += `\t\t\t<SharedString name="Tags"></SharedString>\n`;
     xml += `\t\t</Properties>\n`;
 
     // Process files
@@ -53,9 +53,10 @@ function buildRbxmx() {
         // Main.server.lua is a Script, others are ModuleScripts
         const isMain = name === 'Main.server';
         const className = isMain ? 'Script' : 'ModuleScript';
+        const scriptName = isMain ? 'Main' : name;
         
-        // Use a simple hash-like referent
-        const referent = `RBX_${name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        // Use a clean referent
+        const referent = `RBX_${scriptName.replace(/[^a-zA-Z0-9]/g, '_')}`;
         
         xml += `\t\t<Item class="${className}" referent="${referent}">\n`;
         xml += `\t\t\t<Properties>\n`;
@@ -64,7 +65,7 @@ function buildRbxmx() {
         xml += `\t\t\t\t<bool name="DefinesCapabilities">false</bool>\n`;
         xml += `\t\t\t\t<bool name="Disabled">false</bool>\n`;
         xml += `\t\t\t\t<Content name="LinkedSource"><null></null></Content>\n`;
-        xml += `\t\t\t\t<string name="Name">${name}</string>\n`;
+        xml += `\t\t\t\t<string name="Name">${scriptName}</string>\n`;
         xml += `\t\t\t\t<int64 name="SourceAssetId">-1</int64>\n`;
         xml += `\t\t\t\t<SharedString name="Tags"></SharedString>\n`;
         
@@ -83,12 +84,7 @@ function buildRbxmx() {
     // Close Folder
     xml += `\t</Item>\n`;
     
-    // Shared Strings definition (required by Roblox XML format if Tags is used)
-    xml += `\t<SharedStrings>\n`;
-    xml += `\t\t<SharedString md5="yuZpQdnvvUBOTYh1jqZ2cA=="></SharedString>\n`;
-    xml += `\t</SharedStrings>\n`;
-    
-    // Close Roblox
+    // Close Roblox root (No SharedStrings block needed when all Tags are empty)
     xml += `</roblox>\n`;
 
     fs.writeFileSync(OUTPUT_FILE, xml, 'utf-8');
@@ -124,6 +120,15 @@ function copyToRobloxPlugins() {
         }
     } else {
         console.log(`[Build] Platform ${process.platform} tidak didukung untuk auto-copy plugin.`);
+    }
+
+    // Also update ~/.nvstudio-mcp/studio-plugin/nvstudio_mcp.rbxmx if present
+    const homeClonePlugin = path.join(os.homedir(), '.nvstudio-mcp', 'studio-plugin', 'nvstudio_mcp.rbxmx');
+    if (fs.existsSync(path.dirname(homeClonePlugin))) {
+        try {
+            fs.copyFileSync(OUTPUT_FILE, homeClonePlugin);
+            console.log(`[Build] ✅ Berhasil memperbarui ${homeClonePlugin}`);
+        } catch {}
     }
 }
 

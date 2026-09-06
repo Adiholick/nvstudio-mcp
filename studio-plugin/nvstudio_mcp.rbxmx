@@ -8,7 +8,7 @@
 			<bool name="DefinesCapabilities">false</bool>
 			<string name="Name">nvstudio_mcp</string>
 			<int64 name="SourceAssetId">-1</int64>
-			<SharedString name="Tags">yuZpQdnvvUBOTYh1jqZ2cA==</SharedString>
+			<SharedString name="Tags"></SharedString>
 		</Properties>
 		<Item class="ModuleScript" referent="RBX_create_instance">
 			<Properties>
@@ -367,14 +367,14 @@ end
 ]]></ProtectedString>
 			</Properties>
 		</Item>
-		<Item class="Script" referent="RBX_Main_server">
+		<Item class="Script" referent="RBX_Main">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<bool name="Disabled">false</bool>
 				<Content name="LinkedSource"><null></null></Content>
-				<string name="Name">Main.server</string>
+				<string name="Name">Main</string>
 				<int64 name="SourceAssetId">-1</int64>
 				<SharedString name="Tags"></SharedString>
 				<token name="RunContext">0</token>
@@ -393,7 +393,7 @@ local ui = nil
 
 -- Membangun Tombol Toolbar (Toggle)
 local toolbar = plugin:CreateToolbar("NVStudio MCP")
-local toggleBtn = toolbar:CreateButton("Dashboard", "Buka Dashboard NVStudio MCP", "rbxassetid://82696893597722")
+local toggleBtn = toolbar:CreateButton("Dashboard", "Buka Dashboard NVStudio MCP", "rbxassetid://82696893597722", "NVStudio")
 
 -- Global State & Context AI
 local ctx = {
@@ -420,6 +420,14 @@ if uiModule then
     -- Sync Initial State ke UI
     ui:setAutoConnectState(autoConnect)
     ui:setStatus("disconnected")
+    
+    -- Sync state tombol toolbar dengan status widget
+    if ui.widget then
+        toggleBtn:SetActive(ui.widget.Enabled)
+        ui.widget:GetPropertyChangedSignal("Enabled"):Connect(function()
+            toggleBtn:SetActive(ui.widget.Enabled)
+        end)
+    end
     
     -- Event Toggle GUI Panel
     toggleBtn.Click:Connect(function()
@@ -945,8 +953,8 @@ function UIManager.init(pluginInstance, studioId)
     -- Membuat Widget Panel yang bisa di-dock (menempel)
     local widgetInfo = DockWidgetPluginGuiInfo.new(
         Enum.InitialDockState.Right,
-        false,  -- Initially hidden until toolbar button is clicked
-        false,  -- Override enabled
+        true,   -- Initially visible on first install so user immediately sees the dashboard
+        false,  -- Don't override user's saved state on subsequent launches
         380,    -- Default width
         520,    -- Default height
         280,    -- Min width
@@ -1414,7 +1422,4 @@ end
 			</Properties>
 		</Item>
 	</Item>
-	<SharedStrings>
-		<SharedString md5="yuZpQdnvvUBOTYh1jqZ2cA=="></SharedString>
-	</SharedStrings>
 </roblox>

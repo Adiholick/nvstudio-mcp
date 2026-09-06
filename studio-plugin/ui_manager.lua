@@ -5,8 +5,8 @@ function UIManager.init(pluginInstance, studioId)
     -- Membuat Widget Panel yang bisa di-dock (menempel)
     local widgetInfo = DockWidgetPluginGuiInfo.new(
         Enum.InitialDockState.Right,
-        false,  -- Initially hidden until toolbar button is clicked
-        false,  -- Override enabled
+        true,   -- Initially visible on first install so user immediately sees the dashboard
+        false,  -- Don't override user's saved state on subsequent launches
         380,    -- Default width
         520,    -- Default height
         280,    -- Min width

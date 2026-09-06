@@ -13,7 +13,7 @@ local ui = nil
 
 -- Membangun Tombol Toolbar (Toggle)
 local toolbar = plugin:CreateToolbar("NVStudio MCP")
-local toggleBtn = toolbar:CreateButton("Dashboard", "Buka Dashboard NVStudio MCP", "rbxassetid://82696893597722")
+local toggleBtn = toolbar:CreateButton("Dashboard", "Buka Dashboard NVStudio MCP", "rbxassetid://82696893597722", "NVStudio")
 
 -- Global State & Context AI
 local ctx = {
@@ -40,6 +40,14 @@ if uiModule then
     -- Sync Initial State ke UI
     ui:setAutoConnectState(autoConnect)
     ui:setStatus("disconnected")
+    
+    -- Sync state tombol toolbar dengan status widget
+    if ui.widget then
+        toggleBtn:SetActive(ui.widget.Enabled)
+        ui.widget:GetPropertyChangedSignal("Enabled"):Connect(function()
+            toggleBtn:SetActive(ui.widget.Enabled)
+        end)
+    end
     
     -- Event Toggle GUI Panel
     toggleBtn.Click:Connect(function()
