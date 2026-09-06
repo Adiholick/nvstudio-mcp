@@ -31,6 +31,22 @@ interface SsePeer {
     silenceTimer: NodeJS.Timeout;
 }
 
+// Per-studio pending events queue: events yang belum diambil oleh Studio
+const studioEventQueues = new Map<string, Array<Record<string, unknown>>>();
+
+function enqueueForStudio(studioId: string | null, event: Record<string, unknown>) {
+    if (studioId) {
+        // Event untuk studio tertentu
+        if (!studioEventQueues.has(studioId)) studioEventQueues.set(studioId, []);
+        studioEventQueues.get(studioId)!.push(event);
+    } else {
+        // Broadcast ke semua studio yang terdaftar
+        for (const [sid] of studioEventQueues) {
+            studioEventQueues.get(sid)!.push(event);
+        }
+    }
+}
+
 const ssePeers = new Map<string, SsePeer>();
 
 // Apakah MCP agent (Antigravity/Cursor) sedang terhubung ke stdio transport?
@@ -67,11 +83,14 @@ function sendEvent(peer: SsePeer, kind: string, payload: Record<string, unknown>
  * Push status koneksi ke semua peer (apakah mcpConnected, jumlah peer aktif dll).
  */
 function broadcastStatus() {
-    broadcastEvent('status', {
+    const statusEvent = {
         mcpConnected,
         studioCount: ssePeers.size,
         serverVersion: '2.1.0',
-    });
+    };
+    broadcastEvent('status', statusEvent);
+    // Juga enqueue untuk Studio yang belum polling saat ini
+    enqueueForStudio(null, { kind: 'status', ...statusEvent });
 }
 
 /**
@@ -79,13 +98,16 @@ function broadcastStatus() {
  * Hanya satu yang akan memprosesnya (first-come first-served via requestId).
  */
 function broadcastTask(task: Task) {
-    broadcastEvent('request', {
+    const taskEvent = {
         requestId: task.id,
         command: task.command,
         target: task.target,
         data: task.data ?? null,
         remainingMs: 29000,
-    });
+    };
+    broadcastEvent('request', taskEvent);
+    // Juga enqueue untuk Studio yang sedang tidak polling
+    enqueueForStudio(null, { kind: 'request', ...taskEvent });
 }
 
 // ── Logging ───────────────────────────────────────────────────────────────────
@@ -174,47 +196,55 @@ export function startBridgeServer(port: number = 3055) {
         res.json({ status: 'ok', studioCount: ssePeers.size, mcpConnected, timestamp: Date.now() });
     });
 
-    // ── /api/stream (SSE endpoint utama) ─────────────────────────────────────
+    // ── /api/stream (Snapshot endpoint untuk Roblox GetAsync) ───────────────
+    // Roblox HttpService:GetAsync() TIDAK bisa streaming — ia block sampai
+    // koneksi ditutup. Endpoint ini: daftarkan studio, kirim semua events
+    // yang tertunda (status + queued tasks), lalu TUTUP koneksi.
+    // Plugin mengulang GET ini setiap ~0.5 detik (pseudo-polling via snapshot).
     app.get('/api/stream', (req, res) => {
         const studioId = (req.query.studioId as string) || `anon-${Date.now()}`;
 
-        // Set SSE headers
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.setHeader('X-Accel-Buffering', 'no'); // Untuk Nginx proxy
-        res.flushHeaders();
+        // Daftarkan studio jika belum ada
+        if (!studioEventQueues.has(studioId)) {
+            studioEventQueues.set(studioId, []);
+            io.emit('studio-status', { connected: true, studioCount: studioEventQueues.size, studioId });
+            addLog(io, 'system', `Studio terdaftar. (ID: ${studioId.substring(0, 8)}…, Total: ${studioEventQueues.size})`);
 
-        // Heartbeat setiap 5 detik agar koneksi tidak timeout
-        const heartbeatTimer = setInterval(() => {
-            try {
-                res.write(`data: ${JSON.stringify({ kind: 'heartbeat', timestamp: Date.now() })}\n\n`);
-            } catch {
-                cleanup();
+            if (!dashboardOpened) {
+                dashboardOpened = true;
+                const url = `http://localhost:${port}`;
+                const startCmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
+                const isDaemon = process.argv.includes('--daemon') || process.argv.includes('-d');
+                if (!isDaemon) {
+                    exec(startCmd, (error) => {
+                        if (error) console.error(`[Bridge] Gagal membuka browser:`, error);
+                    });
+                }
             }
-        }, 5000);
+        }
 
-        // Silence timeout: jika kita sendiri tidak bisa kirim apapun dalam 30 detik, bersihkan
-        let silenceTimer = setTimeout(() => cleanup(), 30000);
-        const resetSilence = () => {
-            clearTimeout(silenceTimer);
-            silenceTimer = setTimeout(() => cleanup(), 30000);
-        };
+        // Kumpulkan semua events yang belum dikirim ke studio ini
+        const queue = studioEventQueues.get(studioId) ?? [];
+        studioEventQueues.set(studioId, []); // kosongkan antrian
 
-        const peer: SsePeer = { studioId, res, connectedAt: Date.now(), heartbeatTimer, silenceTimer };
-        ssePeers.set(studioId, peer);
+        // Selalu sertakan status terkini
+        const events: Array<Record<string, unknown>> = [
+            { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.0' },
+        ];
 
-        // Kirim status awal sesaat setelah koneksi
-        sendEvent(peer, 'status', {
-            mcpConnected,
-            studioCount: ssePeers.size,
-            serverVersion: '2.1.0',
-        });
+        // Tambahkan events tertunda (misalnya task requests)
+        for (const ev of queue) {
+            // Hindari duplikat status
+            if (ev.kind !== 'status') events.push(ev);
+        }
 
-        // Jika ada task yang sudah antri sebelum Studio terhubung, kirim sekarang
+        // Jika ada task di queue global, sertakan juga
         if (taskQueue.length > 0) {
-            const task = taskQueue[0]; // preview saja, jangan shift di sini (broadcastTask akan handle)
-            sendEvent(peer, 'request', {
+            const task = taskQueue.shift()!;
+            totalTasks++;
+            addLog(io, 'task', `Mengirim perintah '${task.command}' ke Studio (ID: ${studioId.substring(0, 8)}…).`);
+            events.push({
+                kind: 'request',
                 requestId: task.id,
                 command: task.command,
                 target: task.target,
@@ -223,41 +253,46 @@ export function startBridgeServer(port: number = 3055) {
             });
         }
 
-        io.emit('studio-status', { connected: true, studioCount: ssePeers.size, studioId });
-        addLog(io, 'system', `Roblox Studio terhubung via SSE. (ID: ${studioId.substring(0, 8)}…, Peer aktif: ${ssePeers.size})`);
+        // Format sebagai teks SSE (setiap event = satu baris "data: ...\n\n")
+        res.setHeader('Content-Type', 'text/plain');
+        res.setHeader('Cache-Control', 'no-cache, no-store');
+        const body = events
+            .map(ev => `data: ${JSON.stringify(ev)}`)
+            .join('\n');
+        res.send(body);
+    });
 
-        if (!dashboardOpened) {
-            dashboardOpened = true;
-            const url = `http://localhost:${port}`;
-            const startCmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
-            const isDaemon = process.argv.includes('--daemon') || process.argv.includes('-d');
-            if (!isDaemon) {
-                exec(startCmd, (error) => {
-                    if (error) console.error(`[Bridge] Gagal membuka browser:`, error);
-                });
-                console.error(`[Bridge] Studio terhubung pertama kali! Membuka Dashboard...`);
-            }
-        }
+    // ── /api/events (SSE persisten untuk browser/klien modern) ───────────────
+    app.get('/api/events', (req, res) => {
+        const studioId = (req.query.studioId as string) || `browser-${Date.now()}`;
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders();
+
+        const heartbeatTimer = setInterval(() => {
+            try {
+                res.write(`data: ${JSON.stringify({ kind: 'heartbeat', timestamp: Date.now() })}\n\n`);
+            } catch { cleanup(); }
+        }, 5000);
+
+        const silenceTimer = setTimeout(() => cleanup(), 60000);
+        const peer: SsePeer = { studioId, res, connectedAt: Date.now(), heartbeatTimer, silenceTimer };
+        ssePeers.set(studioId, peer);
+
+        sendEvent(peer, 'status', { mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.0' });
 
         function cleanup() {
             clearInterval(heartbeatTimer);
             clearTimeout(silenceTimer);
             ssePeers.delete(studioId);
-            io.emit('studio-status', { connected: ssePeers.size > 0, studioCount: ssePeers.size, studioId });
-            addLog(io, 'system', `Roblox Studio terputus. (ID: ${studioId.substring(0, 8)}…, Peer tersisa: ${ssePeers.size})`);
-            try { res.end(); } catch { /* sudah tutup */ }
+            try { res.end(); } catch { /* ignore */ }
         }
 
         req.on('close', cleanup);
         req.on('error', cleanup);
-
-        // Semua write berhasil → reset silence timer
-        const origWrite = res.write.bind(res);
-        (res as any).write = (...args: Parameters<typeof origWrite>) => {
-            const result = origWrite(...args);
-            resetSilence();
-            return result;
-        };
     });
 
     // ── /api/response/:taskId (Studio POSTs hasil eksekusi) ───────────────────
@@ -291,19 +326,13 @@ export function startBridgeServer(port: number = 3055) {
         res.json({ ok: true });
     });
 
-    // ── Push task ke SSE stream saat ada task baru ────────────────────────────
+    // ── Notifikasi task baru ke Dashboard ────────────────────────────────────
+    // Pengiriman task ke Studio dilakukan via /api/stream (snapshot polling).
+    // Di sini kita hanya log ke dashboard browser.
     taskEmitter.on('new_task', () => {
         if (taskQueue.length === 0) return;
-
-        if (ssePeers.size === 0) {
-            // Tidak ada Studio terhubung — task tetap antri, akan dikirim saat Studio connect
-            return;
-        }
-
-        const task = taskQueue.shift()!;
-        totalTasks++;
-        addLog(io, 'task', `Mengirim perintah '${task.command}' ke Studio${task.target ? ` → ${task.target}` : ''}.`);
-        broadcastTask(task);
+        const task = taskQueue[0]; // preview saja, tidak shift
+        addLog(io, 'task', `Task baru antri: '${task.command}'${task.target ? ` → ${task.target}` : ''}. Menunggu Studio polling...`);
     });
 
     // ── /api/tasks/enqueue (dari proses MCP eksternal / bridge forwarding) ────

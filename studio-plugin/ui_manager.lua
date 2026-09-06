@@ -397,7 +397,7 @@ function UIManager:addLog(text, color)
 end
 
 -- ═══════════════════════════════════════════
--- 3 State Setter (Disconnected, Waiting, Connected)
+-- 4 State Setter (Disconnected, Waiting, Server Connected, Connected)
 -- ═══════════════════════════════════════════
 function UIManager:setStatus(stateStr)
     if stateStr == "disconnected" then
@@ -408,11 +408,20 @@ function UIManager:setStatus(stateStr)
         self.termStroke.Color = Color3.fromRGB(40, 40, 48)
 
     elseif stateStr == "waiting" then
+        -- Server tidak dapat dijangkau (bridge belum jalan)
+        self.connectBtn.Text = "  Disconnect"
+        self._updateBtnBaseColor(Color3.fromRGB(180, 50, 50))
+        self.statusLabel.Text = "● Waiting for Server..."
+        self.statusLabel.TextColor3 = Color3.fromRGB(255, 140, 60)
+        self.termStroke.Color = Color3.fromRGB(100, 70, 30)
+
+    elseif stateStr == "server_connected" then
+        -- Server reachable, tapi IDE Agent (Antigravity) belum konek
         self.connectBtn.Text = "  Disconnect"
         self._updateBtnBaseColor(Color3.fromRGB(180, 50, 50))
         self.statusLabel.Text = "● Waiting for AI..."
-        self.statusLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
-        self.termStroke.Color = Color3.fromRGB(130, 110, 50)
+        self.statusLabel.TextColor3 = Color3.fromRGB(80, 180, 255)
+        self.termStroke.Color = Color3.fromRGB(40, 80, 130)
 
     elseif stateStr == "connected" then
         self.connectBtn.Text = "  Disconnect"
