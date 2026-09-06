@@ -196,9 +196,9 @@ local function updateUIStatus()
 	elseif mcpAgentActive then
 		ui:setStatus("connected")
 	else
-		-- Server reachable tapi tidak ada AI agent → "server connected, waiting for agent"
-		-- Gunakan status "waiting" dengan pesan yang berbeda
-		ui:setStatus("waiting")
+		-- Server reachable tapi tidak ada AI agent
+		-- Tampilkan sebagai connected (karena server sse bridge aktif)
+		ui:setStatus("server_connected")
 	end
 end
 
@@ -325,7 +325,8 @@ function startConnectionLoop()
 							ui:addLog("[System] ✅ IDE Agent (Antigravity) terhubung ke MCP.", Color3.fromRGB(100, 255, 100))
 						else
 							ui:setStatus("server_connected")
-							ui:addLog("[System] Menunggu IDE Agent (Antigravity/Cursor)...", Color3.fromRGB(100, 180, 255))
+							-- No need to explicitly add log for IDE Agent wait every time it connects, 
+							-- bridge connected log is enough.
 						end
 					end
 				elseif serverReachable and not mcpAgentActive then

@@ -95,7 +95,7 @@ function UIManager.init(pluginInstance, studioId)
 
     -- Version
     local versionLabel = Instance.new("TextLabel")
-    versionLabel.Text = "v1.2.0 · Hybrid Agent"
+    versionLabel.Text = "v2.1.2"
     versionLabel.Font = Enum.Font.Gotham
     versionLabel.TextSize = 11
     versionLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
@@ -416,12 +416,12 @@ function UIManager:setStatus(stateStr)
         self.termStroke.Color = Color3.fromRGB(100, 70, 30)
 
     elseif stateStr == "server_connected" then
-        -- Server reachable, tapi IDE Agent (Antigravity) belum konek
+        -- Server reachable, tampilkan Connected meskipun agent (IDE) belum konek via stdio
         self.connectBtn.Text = "  Disconnect"
         self._updateBtnBaseColor(Color3.fromRGB(180, 50, 50))
-        self.statusLabel.Text = "● Waiting for AI..."
-        self.statusLabel.TextColor3 = Color3.fromRGB(80, 180, 255)
-        self.termStroke.Color = Color3.fromRGB(40, 80, 130)
+        self.statusLabel.Text = "● Connected"
+        self.statusLabel.TextColor3 = Color3.fromRGB(100, 230, 120)
+        self.termStroke.Color = Color3.fromRGB(50, 120, 60)
 
     elseif stateStr == "connected" then
         self.connectBtn.Text = "  Disconnect"
