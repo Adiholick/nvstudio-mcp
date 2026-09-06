@@ -1,0 +1,9 @@
+node_modules/
+src/
+.history/
+*.log
+.clinerules
+.cursorrules
+.windsurfrules
+AI_RULES.md
+scratch/
