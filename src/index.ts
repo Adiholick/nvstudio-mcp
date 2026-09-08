@@ -29,10 +29,11 @@ const isDaemon = process.argv.includes('--daemon') || process.argv.includes('-d'
 startBridgeServer(3055);
 
 // 2. Inisialisasi server MCP
+const pkg = require('../package.json');
 const server = new Server(
   {
     name: "nvstudio-mcp",
-    version: "2.1.8",
+    version: pkg.version,
   },
   {
     capabilities: {
@@ -47,13 +48,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "call_mcp_tool",
-        description: "ALAT MUTLAK UNTUK ROBLOX. Command: patch_script_source, get_children, get_script_source, update_script_source, rollback_script, get_logs, create_instance, search_instance, generate_terrain, insert_asset, delete_instance, get_properties, script_grep, execute_luau, search_asset.",
+        description: "ALAT MUTLAK UNTUK ROBLOX. Command: patch_script_source, get_children, get_full_tree, get_script_source, update_script_source, rollback_script, get_logs, create_instance, search_instance, generate_terrain, insert_asset, delete_instance, get_properties, set_properties, script_grep, execute_luau, search_asset.",
         inputSchema: {
           type: "object",
           properties: {
             command: {
               type: "string",
-              description: "Perintah yang dieksekusi (contoh: 'patch_script_source', 'get_script_source', 'update_script_source').",
+              description: "Perintah yang dieksekusi (contoh: 'set_properties', 'get_full_tree', 'patch_script_source').",
             },
             target: {
               type: "string",
@@ -61,10 +62,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             data: {
               type: "string",
-              description: "Data tambahan (misal payload JSON untuk patch_script_source, atau source code penuh untuk update_script_source).",
+              description: "Data tambahan. Untuk set_properties: JSON string dari properti. Untuk delete_instance: kirim 'force' jika descendants > 10. Untuk patch/update: source code.",
             },
           },
-          required: ["command", "target"],
+          required: ["command"],
         },
       },
     ],
@@ -85,14 +86,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   const { command, target, data } = args;
 
-  if (!command || !target) {
+  if (!command) {
     return {
       content: [
         {
           type: "text",
           text: JSON.stringify({
             status: "error",
-            error: "Parameter 'command' dan 'target' wajib diisi.",
+            error: "Parameter 'command' wajib diisi.",
           }),
         },
       ],
@@ -115,7 +116,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               isError: true
           };
       }
-      backupScript(target, String(data));
   }
 
   // Intercept command yang dieksekusi di server lokal (Node.js) alih-alih di Studio
@@ -156,10 +156,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // 8. Teruskan ke antrean tugas
   try {
-    if (command === "update_script_source" && data) {
-      backupScript(target, String(data));
-    }
-
     let result: any;
     if (isBridgeHosting) {
       // Instance ini sendiri yang meng-host bridge server

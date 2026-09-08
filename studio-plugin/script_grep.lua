@@ -13,7 +13,9 @@ return function(targetInstance, data, ctx, targetPath)
         game:GetService("ServerScriptService"),
         game:GetService("ReplicatedStorage"),
         game:GetService("StarterPlayer"),
-        game:GetService("StarterGui")
+        game:GetService("StarterGui"),
+        game:GetService("ServerStorage"),
+        game:GetService("Lighting")
     }
 
     local function searchInScript(scriptObj)
@@ -44,16 +46,15 @@ return function(targetInstance, data, ctx, targetPath)
     end
 
     for _, service in ipairs(searchableServices) do
-        pcall(function()
-            local descendants = service:GetDescendants()
-            for _, desc in ipairs(descendants) do
-                if desc:IsA("LuaSourceContainer") then
-                    if searchInScript(desc) then
-                        break
-                    end
+        local descendants = {}
+        pcall(function() descendants = service:GetDescendants() end)
+        for _, desc in ipairs(descendants) do
+            if desc:IsA("LuaSourceContainer") then
+                if searchInScript(desc) then
+                    break
                 end
             end
-        end)
+        end
         if matchCount >= MAX_MATCHES then
             break
         end

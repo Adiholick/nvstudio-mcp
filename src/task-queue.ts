@@ -44,7 +44,10 @@ export function addTaskToQueue(
 
     pendingTasks.set(id, { resolve, reject, timer });
     taskQueue.push(task);
-    taskEmitter.emit('new_task');
+    if (taskQueue.length > 50) {
+      taskQueue.shift();
+    }
+    taskEmitter.emit('new_task', task);
   });
 }
 

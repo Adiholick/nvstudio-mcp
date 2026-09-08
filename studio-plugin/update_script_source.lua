@@ -7,7 +7,11 @@ return function(targetInstance, data, ctx, targetPath)
         -- hanya akan membuat AI gagal terus menerus untuk menulis script. 
         -- Error syntax akan ditangkap secara native oleh Roblox Output.
         
-        ctx.scriptHistory[targetPath] = targetInstance.Source
+        if type(ctx.scriptHistory[targetPath]) ~= "table" then
+            ctx.scriptHistory[targetPath] = {}
+        end
+        table.insert(ctx.scriptHistory[targetPath], targetInstance.Source)
+        if #ctx.scriptHistory[targetPath] > 15 then table.remove(ctx.scriptHistory[targetPath], 1) end
         targetInstance.Source = newCode
         return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil diperbarui." }
     else

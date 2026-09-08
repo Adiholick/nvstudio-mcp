@@ -6,6 +6,8 @@ import path from 'path';
 import { exec, execSync } from 'child_process';
 import { taskQueue, resolvePendingTask, taskEmitter, addTaskToQueue, Task } from './task-queue';
 
+const { version: SERVER_VERSION } = require('../package.json');
+
 interface ActivityLog {
     id: string;
     time: string;
@@ -41,6 +43,17 @@ interface SsePeer {
 
 // Per-studio pending events queue: events yang belum diambil oleh Studio
 const studioEventQueues = new Map<string, Array<Record<string, unknown>>>();
+const studioLastSeen = new Map<string, number>();
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [sid, lastSeen] of studioLastSeen.entries()) {
+        if (now - lastSeen > 60000) {
+            studioEventQueues.delete(sid);
+            studioLastSeen.delete(sid);
+        }
+    }
+}, 30000);
 
 function enqueueForStudio(studioId: string | null, event: Record<string, unknown>) {
     if (studioId) {
@@ -94,7 +107,7 @@ function broadcastStatus() {
     const statusEvent = {
         mcpConnected,
         studioCount: Math.max(ssePeers.size, studioEventQueues.size),
-        serverVersion: '2.1.8',
+        serverVersion: SERVER_VERSION,
     };
     broadcastEvent('status', statusEvent);
     // Juga enqueue untuk Studio yang belum polling saat ini
@@ -200,10 +213,16 @@ export function startBridgeServer(port: number = 3055) {
     });
 
     // ── /api/ping ─────────────────────────────────────────────────────────────
-    // Dipertahankan untuk backward-compat (installer check, health check).
     app.get('/api/ping', (req, res) => {
+        const uptime = Math.floor((Date.now() - new Date(sessionStart).getTime()) / 1000);
         const activeStudios = Math.max(ssePeers.size, studioEventQueues.size);
-        res.json({ status: 'ok', studioCount: activeStudios, mcpConnected, timestamp: Date.now() });
+        res.json({ 
+            status: 'ok', 
+            version: SERVER_VERSION,
+            uptimeSeconds: uptime,
+            totalTasksProcessed: totalTasks,
+            activeStudios: activeStudios
+        });
     });
 
     // ── /api/stream (Snapshot endpoint untuk Roblox GetAsync) ───────────────
@@ -213,6 +232,7 @@ export function startBridgeServer(port: number = 3055) {
     // Plugin mengulang GET ini setiap ~0.5 detik (pseudo-polling via snapshot).
     app.get('/api/stream', (req, res) => {
         const studioId = (req.query.studioId as string) || `anon-${Date.now()}`;
+        studioLastSeen.set(studioId, Date.now());
 
         // Daftarkan studio jika belum ada
         if (!studioEventQueues.has(studioId)) {
@@ -236,28 +256,13 @@ export function startBridgeServer(port: number = 3055) {
 
         // Selalu sertakan status terkini
         const events: Array<Record<string, unknown>> = [
-            { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.8' },
+            { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: SERVER_VERSION },
         ];
 
         // Tambahkan events tertunda (misalnya task requests)
         for (const ev of queue) {
             // Hindari duplikat status
             if (ev.kind !== 'status') events.push(ev);
-        }
-
-        // Jika ada task di queue global, sertakan juga
-        if (taskQueue.length > 0) {
-            const task = taskQueue.shift()!;
-            totalTasks++;
-            addLog(io, 'task', `Mengirim perintah '${task.command}' ke Studio (ID: ${studioId.substring(0, 8)}…).`);
-            events.push({
-                kind: 'request',
-                requestId: task.id,
-                command: task.command,
-                target: task.target,
-                data: task.data ?? null,
-                remainingMs: 29000,
-            });
         }
 
         // Format sebagai teks SSE (setiap event = satu baris "data: ...\n\n")
@@ -281,7 +286,13 @@ export function startBridgeServer(port: number = 3055) {
 
         const heartbeatTimer = setInterval(() => {
             try {
-                res.write(`data: ${JSON.stringify({ kind: 'heartbeat', timestamp: Date.now() })}\n\n`);
+                const payload = JSON.stringify({
+                    kind: 'heartbeat',
+                    timestamp: Date.now(),
+                    mcpConnected: taskQueue.length > 0 || totalTasks > 0,
+                    serverVersion: SERVER_VERSION,
+                });
+                res.write(`data: ${payload}\n\n`);
             } catch { cleanup(); }
         }, 5000);
 
@@ -289,7 +300,7 @@ export function startBridgeServer(port: number = 3055) {
         const peer: SsePeer = { studioId, res, connectedAt: Date.now(), heartbeatTimer, silenceTimer };
         ssePeers.set(studioId, peer);
 
-        sendEvent(peer, 'status', { mcpConnected, studioCount: studioEventQueues.size, serverVersion: '2.1.8' });
+        sendEvent(peer, 'status', { mcpConnected, studioCount: studioEventQueues.size, serverVersion: SERVER_VERSION });
 
         function cleanup() {
             clearInterval(heartbeatTimer);
@@ -336,10 +347,10 @@ export function startBridgeServer(port: number = 3055) {
     // ── Notifikasi task baru ke Dashboard ────────────────────────────────────
     // Pengiriman task ke Studio dilakukan via /api/stream (snapshot polling).
     // Di sini kita hanya log ke dashboard browser.
-    taskEmitter.on('new_task', () => {
-        if (taskQueue.length === 0) return;
-        const task = taskQueue[0]; // preview saja, tidak shift
-        addLog(io, 'task', `Task baru antri: '${task.command}'${task.target ? ` → ${task.target}` : ''}. Menunggu Studio polling...`);
+    taskEmitter.on('new_task', (task: Task) => {
+        totalTasks++;
+        addLog(io, 'task', `Task dikirim ke Studio: '${task.command}'${task.target ? ` → ${task.target}` : ''}`);
+        broadcastTask(task);
     });
 
     // ── /api/tasks/enqueue (dari proses MCP eksternal / bridge forwarding) ────
@@ -356,12 +367,12 @@ export function startBridgeServer(port: number = 3055) {
     // ── /api/tasks (legacy long-poll — dipertahankan untuk backward-compat) ───
     // Studio lama yang belum update plugin masih bisa bekerja via polling.
     const waitingPollers: express.Response[] = [];
-    taskEmitter.on('new_task_legacy', () => {
-        if (taskQueue.length > 0 && waitingPollers.length > 0) {
+    taskEmitter.on('new_task', (task: Task) => {
+        if (waitingPollers.length > 0) {
             const pollRes = waitingPollers.shift();
-            const task = taskQueue.shift();
-            totalTasks++;
-            addLog(io, 'task', `[Legacy] Mengirim perintah '${task?.command}' ke Studio.`);
+            const index = taskQueue.findIndex(t => t.id === task.id);
+            if (index !== -1) taskQueue.splice(index, 1);
+            addLog(io, 'task', `[Legacy] Mengirim perintah '${task.command}' ke Studio.`);
             pollRes?.json(task);
         }
     });
@@ -369,20 +380,12 @@ export function startBridgeServer(port: number = 3055) {
     app.get('/api/tasks', (req, res) => {
         if (taskQueue.length > 0) {
             const task = taskQueue.shift();
-            totalTasks++;
-            addLog(io, 'task', `[Legacy] Mengirim perintah '${task?.command}' ke Studio.`);
-            return res.json(task);
+            addLog(io, 'task', `[Legacy] Mengirim perintah tertunda '${task?.command}' ke Studio.`);
+            res.json(task);
+            return;
         }
-        const timeoutId = setTimeout(() => {
-            const index = waitingPollers.indexOf(res);
-            if (index !== -1) {
-                waitingPollers.splice(index, 1);
-                res.json({ id: null });
-            }
-        }, 20000);
         waitingPollers.push(res);
         req.on('close', () => {
-            clearTimeout(timeoutId);
             const index = waitingPollers.indexOf(res);
             if (index !== -1) waitingPollers.splice(index, 1);
         });

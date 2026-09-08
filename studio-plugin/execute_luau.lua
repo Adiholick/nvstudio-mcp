@@ -21,10 +21,17 @@ return function(targetInstance, data, ctx, targetPath)
     local isFinished = false
     
     -- Eksekusi asinkron dengan batas waktu (timeout) 5 detik
-    task.spawn(function()
+    local logs = {}
+    
+    local execThread = task.spawn(function()
         local reqSuccess, func = pcall(function() return require(moduleScript) end)
         if reqSuccess and type(func) == "function" then
+            local LogService = game:GetService("LogService")
+            local connection = LogService.MessageOut:Connect(function(msg, msgType)
+                table.insert(logs, msg)
+            end)
             local execSuccess, res = pcall(func)
+            pcall(function() connection:Disconnect() end)
             if execSuccess then
                 resultData = res
             else
@@ -42,6 +49,11 @@ return function(targetInstance, data, ctx, targetPath)
         timeWaited = timeWaited + task.wait()
     end
     
+
+    if not isFinished then
+        pcall(function() task.cancel(execThread) end)
+    end
+    
     -- Pembersihan (Wajib dihancurkan)
     pcall(function() moduleScript:Destroy() end)
     
@@ -50,12 +62,18 @@ return function(targetInstance, data, ctx, targetPath)
     end
     
     if execError then
-        return { status = "error", error = execError }
+        return { status = "error", error = execError, logs = #logs > 0 and logs or nil }
     end
     
+    local returnPayload = { status = "success" }
+    if #logs > 0 then
+        returnPayload.logs = logs
+    end
+
     -- Cegah return nil error
     if resultData == nil then
-        return { status = "success", result = "Eksekusi berhasil (Tidak ada nilai kembalian)." }
+        returnPayload.result = "Eksekusi berhasil (Tidak ada nilai kembalian)."
+        return returnPayload
     end
     
     -- JSON Encode untuk mencegah raw Instance return crash
@@ -64,7 +82,8 @@ return function(targetInstance, data, ctx, targetPath)
     end)
     
     if serializeSuccess then
-        return { status = "success", result = HttpService:JSONDecode(jsonRes) } -- decode kembali agar format aslinya diteruskan oleh router
+        returnPayload.result = HttpService:JSONDecode(jsonRes) -- decode kembali agar format aslinya diteruskan oleh router
+        return returnPayload
     else
         return { status = "error", error = "Gagal menserialisasi hasil (Dilarang mengembalikan raw Roblox Instance): " .. tostring(jsonRes) }
     end

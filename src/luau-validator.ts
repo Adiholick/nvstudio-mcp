@@ -10,11 +10,6 @@ export function validateLuauSyntax(source: string): ValidationResult {
     // Stack for blocks: function, do, if, for, while, repeat
     // We'll keep it simple: just count block openers vs block closers (end, until)
     // Note: This is a heuristic pre-commit check. It doesn't replace a full AST parser,
-    // but catches 90% of AI hallucination syntax errors (missing 'end', etc.)
-
-    let blockDepth = 0;
-    let repeatDepth = 0;
-    
     // Bracket stacks
     let parenDepth = 0; // ()
     let braceDepth = 0; // {}
@@ -121,20 +116,22 @@ export function validateLuauSyntax(source: string): ValidationResult {
 
             // At this point, we are outside strings and comments.
             // Check brackets
-            if (char === '(') parenDepth++;
-            else if (char === ')') {
-                parenDepth--;
-                if (parenDepth < 0) return { valid: false, error: 'Kelebihan tutup kurung ")"', line: i + 1 };
-            }
-            else if (char === '{') braceDepth++;
-            else if (char === '}') {
-                braceDepth--;
-                if (braceDepth < 0) return { valid: false, error: 'Kelebihan tutup kurawal "}"', line: i + 1 };
-            }
-            else if (char === '[') bracketDepth++;
-            else if (char === ']') {
-                bracketDepth--;
-                if (bracketDepth < 0) return { valid: false, error: 'Kelebihan tutup siku "]"', line: i + 1 };
+            if (!inString && !inMultilineString && !inMultilineComment) {
+                if (char === '(') parenDepth++;
+                else if (char === ')') {
+                    parenDepth--;
+                    if (parenDepth < 0) return { valid: false, error: 'Kelebihan tutup kurung ")"', line: i + 1 };
+                }
+                else if (char === '{') braceDepth++;
+                else if (char === '}') {
+                    braceDepth--;
+                    if (braceDepth < 0) return { valid: false, error: 'Kelebihan tutup kurawal "}"', line: i + 1 };
+                }
+                else if (char === '[') bracketDepth++;
+                else if (char === ']') {
+                    bracketDepth--;
+                    if (bracketDepth < 0) return { valid: false, error: 'Kelebihan tutup siku "]"', line: i + 1 };
+                }
             }
 
             j++;
@@ -142,35 +139,6 @@ export function validateLuauSyntax(source: string): ValidationResult {
         
         if (inString) {
             return { valid: false, error: 'String tidak ditutup (unclosed string literal)', line: i + 1 };
-        }
-
-        // Tokenize line to check blocks (very simplified heuristic)
-        // We only check for keywords bounded by word boundaries
-        if (!inMultilineString && !inMultilineComment) {
-            // Remove string literals and comments for naive keyword counting
-            let cleanLine = line.replace(/(--.*)/, ''); // remove single line comments
-            cleanLine = cleanLine.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, ''); // remove inline strings
-            
-            // Avoid false positives like `local func = "do"` by looking at word boundaries
-            // This is a naive regex matching. 
-            // In Luau: 'do', 'if', 'function', 'for', 'while' need an 'end'.
-            // 'repeat' needs 'until'.
-            
-            const words = cleanLine.split(/[^a-zA-Z0-9_]+/).filter(w => w.length > 0);
-            for (let w = 0; w < words.length; w++) {
-                const word = words[w];
-                if (word === 'if' || word === 'function' || word === 'for' || word === 'while' || word === 'do') {
-                    // 'elseif' does not create a new block.
-                    // 'if' does.
-                    blockDepth++;
-                } else if (word === 'end') {
-                    blockDepth--;
-                } else if (word === 'repeat') {
-                    repeatDepth++;
-                } else if (word === 'until') {
-                    repeatDepth--;
-                }
-            }
         }
     }
 
@@ -181,11 +149,5 @@ export function validateLuauSyntax(source: string): ValidationResult {
     if (braceDepth > 0) return { valid: false, error: 'Kekurangan tutup kurawal "}"' };
     if (bracketDepth > 0) return { valid: false, error: 'Kekurangan tutup siku "]"' };
 
-    // We can't strictly enforce blockDepth == 0 because our heuristic is very naive
-    // and might be thrown off by complex inline patterns, but it catches massive missing 'end's.
-    // So we'll return a warning instead of blocking if blockDepth != 0, 
-    // or we can just let it pass to Studio which will output the real error.
-    // For now, let's just use it as a basic check.
-    
     return { valid: true };
 }

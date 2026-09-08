@@ -129,10 +129,26 @@ local function getInstanceFromPath(pathString)
 		local svc = game:GetService(parts[1])
 		if svc then current = svc; table.remove(parts, 1) end
 	end)
-	for _, part in ipairs(parts) do
+	local i = 1
+	while i <= #parts do
+		local part = parts[i]
 		local found = current:FindFirstChild(part)
+		
+		-- Jika tidak ketemu, coba gabungkan dengan part berikutnya (untuk nama yang mengandung titik)
+		local combinedPart = part
+		local lookAhead = i + 1
+		while not found and lookAhead <= #parts do
+			combinedPart = combinedPart .. "." .. parts[lookAhead]
+			found = current:FindFirstChild(combinedPart)
+			if found then
+				i = lookAhead
+			end
+			lookAhead = lookAhead + 1
+		end
+		
 		if not found then return nil end
 		current = found
+		i = i + 1
 	end
 	return current
 end
@@ -155,8 +171,16 @@ local function processTask(taskData)
 		return { id = taskData.id, status = "error", error = "Command tidak dikenali: " .. taskData.command }
 	end
 
-	local result = skillFunc(targetInstance, taskData.data, ctx, taskData.target)
-	result.id    = taskData.id
+	local ok, result = pcall(function()
+		return skillFunc(targetInstance, taskData.data, ctx, taskData.target)
+	end)
+	
+	if not ok then
+		result = { status = "error", error = "Internal Plugin Error: " .. tostring(result) }
+	end
+	
+	result = result or { status = "success", result = "Eksekusi selesai (Tidak ada return value)" }
+	result.id = taskData.id
 
 	if ui then
 		local color = result.status == "success" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
@@ -186,20 +210,6 @@ local function sendResponse(taskId, resultData)
 			ui:addLog("[System] Gagal kirim response: " .. tostring(err), Color3.fromRGB(255, 100, 100))
 		end
 	end)
-end
-
--- ── Update UI berdasarkan state ───────────────────────────────────────────────
-local function updateUIStatus()
-	if not ui then return end
-	if not serverReachable then
-		ui:setStatus("waiting")
-	elseif mcpAgentActive then
-		ui:setStatus("connected")
-	else
-		-- Server reachable tapi tidak ada AI agent
-		-- Tampilkan sebagai connected (karena server sse bridge aktif)
-		ui:setStatus("server_connected")
-	end
 end
 
 -- ── Proses satu event dari SSE stream ────────────────────────────────────────

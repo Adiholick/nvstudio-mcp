@@ -78,6 +78,11 @@ end
     local className = targetInstance.ClassName
     local parentName = targetInstance.Parent and targetInstance.Parent.Name or "nil"
     
+    local childrenCount = #targetInstance:GetDescendants()
+    if childrenCount > 10 and data ~= "force" then
+        return { status = "error", error = "GUARDRAIL: Instance '" .. name .. "' memiliki " .. childrenCount .. " descendants. Jika Anda yakin ingin menghapus seluruhnya beserta isinya, sertakan data='force'." }
+    end
+    
     local success, err = pcall(function()
         targetInstance:Destroy()
     end)
@@ -124,10 +129,17 @@ end
     local isFinished = false
     
     -- Eksekusi asinkron dengan batas waktu (timeout) 5 detik
-    task.spawn(function()
+    local logs = {}
+    
+    local execThread = task.spawn(function()
         local reqSuccess, func = pcall(function() return require(moduleScript) end)
         if reqSuccess and type(func) == "function" then
+            local LogService = game:GetService("LogService")
+            local connection = LogService.MessageOut:Connect(function(msg, msgType)
+                table.insert(logs, msg)
+            end)
             local execSuccess, res = pcall(func)
+            pcall(function() connection:Disconnect() end)
             if execSuccess then
                 resultData = res
             else
@@ -145,6 +157,11 @@ end
         timeWaited = timeWaited + task.wait()
     end
     
+
+    if not isFinished then
+        pcall(function() task.cancel(execThread) end)
+    end
+    
     -- Pembersihan (Wajib dihancurkan)
     pcall(function() moduleScript:Destroy() end)
     
@@ -153,12 +170,18 @@ end
     end
     
     if execError then
-        return { status = "error", error = execError }
+        return { status = "error", error = execError, logs = #logs > 0 and logs or nil }
     end
     
+    local returnPayload = { status = "success" }
+    if #logs > 0 then
+        returnPayload.logs = logs
+    end
+
     -- Cegah return nil error
     if resultData == nil then
-        return { status = "success", result = "Eksekusi berhasil (Tidak ada nilai kembalian)." }
+        returnPayload.result = "Eksekusi berhasil (Tidak ada nilai kembalian)."
+        return returnPayload
     end
     
     -- JSON Encode untuk mencegah raw Instance return crash
@@ -167,7 +190,8 @@ end
     end)
     
     if serializeSuccess then
-        return { status = "success", result = HttpService:JSONDecode(jsonRes) } -- decode kembali agar format aslinya diteruskan oleh router
+        returnPayload.result = HttpService:JSONDecode(jsonRes) -- decode kembali agar format aslinya diteruskan oleh router
+        return returnPayload
     else
         return { status = "error", error = "Gagal menserialisasi hasil (Dilarang mengembalikan raw Roblox Instance): " .. tostring(jsonRes) }
     end
@@ -223,10 +247,68 @@ end
 				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local children = {}
-    for _, child in ipairs(targetInstance:GetChildren()) do
+    local allChildren = targetInstance:GetChildren()
+    local MAX_LIMIT = 200
+    for i, child in ipairs(allChildren) do
+        if i > MAX_LIMIT then
+            table.insert(children, "... (Terpotong, " .. tostring(#allChildren - MAX_LIMIT) .. " children lainnya tidak ditampilkan)")
+            break
+        end
         table.insert(children, child.Name .. " (" .. child.ClassName .. ")")
     end
     return { status = "success", result = children }
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_get_full_tree">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">get_full_tree</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    local maxDepth = 2
+    if data and data ~= "" then
+        pcall(function() maxDepth = tonumber(data) or 2 end)
+    end
+    
+    local totalNodes = 0
+    local HARD_LIMIT = 2000 -- safeguard
+    
+    local function traverse(inst, currentDepth)
+        totalNodes = totalNodes + 1
+        local node = { name = inst.Name, className = inst.ClassName }
+        
+        if totalNodes >= HARD_LIMIT then
+            return { name = "... (terpotong, melebihi limit " .. HARD_LIMIT .. " nodes)", className = "Warning" }
+        end
+        
+        if currentDepth >= maxDepth then
+            local childCount = #inst:GetChildren()
+            if childCount > 0 then
+                node.children = "... (" .. childCount .. " children tersembunyi)"
+            end
+            return node
+        end
+        
+        local children = inst:GetChildren()
+        if #children > 0 then
+            node.children = {}
+            for _, child in ipairs(children) do
+                table.insert(node.children, traverse(child, currentDepth + 1))
+            end
+        end
+        
+        return node
+    end
+    
+    local tree = traverse(targetInstance, 0)
+    return { status = "success", result = tree }
 end
 ]]></ProtectedString>
 			</Properties>
@@ -358,8 +440,12 @@ end
     end)
     
     if success and model then
-        model.Parent = game.Workspace
-        return { status = "success", result = "Aset berhasil dimasukkan ke Workspace." }
+        if targetInstance == game or targetInstance.ClassName == "DataModel" then
+            model.Parent = game.Workspace
+        else
+            model.Parent = targetInstance
+        end
+        return { status = "success", result = "Aset berhasil dimasukkan ke " .. model.Parent.Name .. "." }
     else
         return { status = "error", error = "Gagal memuat aset. Pastikan Asset ID benar dan akun/plugin Anda memiliki izin (Ownership/Public)." }
     end
@@ -509,10 +595,26 @@ local function getInstanceFromPath(pathString)
 		local svc = game:GetService(parts[1])
 		if svc then current = svc; table.remove(parts, 1) end
 	end)
-	for _, part in ipairs(parts) do
+	local i = 1
+	while i <= #parts do
+		local part = parts[i]
 		local found = current:FindFirstChild(part)
+		
+		-- Jika tidak ketemu, coba gabungkan dengan part berikutnya (untuk nama yang mengandung titik)
+		local combinedPart = part
+		local lookAhead = i + 1
+		while not found and lookAhead <= #parts do
+			combinedPart = combinedPart .. "." .. parts[lookAhead]
+			found = current:FindFirstChild(combinedPart)
+			if found then
+				i = lookAhead
+			end
+			lookAhead = lookAhead + 1
+		end
+		
 		if not found then return nil end
 		current = found
+		i = i + 1
 	end
 	return current
 end
@@ -535,8 +637,16 @@ local function processTask(taskData)
 		return { id = taskData.id, status = "error", error = "Command tidak dikenali: " .. taskData.command }
 	end
 
-	local result = skillFunc(targetInstance, taskData.data, ctx, taskData.target)
-	result.id    = taskData.id
+	local ok, result = pcall(function()
+		return skillFunc(targetInstance, taskData.data, ctx, taskData.target)
+	end)
+	
+	if not ok then
+		result = { status = "error", error = "Internal Plugin Error: " .. tostring(result) }
+	end
+	
+	result = result or { status = "success", result = "Eksekusi selesai (Tidak ada return value)" }
+	result.id = taskData.id
 
 	if ui then
 		local color = result.status == "success" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
@@ -566,20 +676,6 @@ local function sendResponse(taskId, resultData)
 			ui:addLog("[System] Gagal kirim response: " .. tostring(err), Color3.fromRGB(255, 100, 100))
 		end
 	end)
-end
-
--- ── Update UI berdasarkan state ───────────────────────────────────────────────
-local function updateUIStatus()
-	if not ui then return end
-	if not serverReachable then
-		ui:setStatus("waiting")
-	elseif mcpAgentActive then
-		ui:setStatus("connected")
-	else
-		-- Server reachable tapi tidak ada AI agent
-		-- Tampilkan sebagai connected (karena server sse bridge aktif)
-		ui:setStatus("server_connected")
-	end
 end
 
 -- ── Proses satu event dari SSE stream ────────────────────────────────────────
@@ -825,7 +921,11 @@ return function(targetInstance, data, ctx, targetPath)
     end
 
     -- Simpan backup snapshot sebelum mengaplikasikan patch
-    ctx.scriptHistory[targetPath] = currentSource
+    if type(ctx.scriptHistory[targetPath]) ~= "table" then
+        ctx.scriptHistory[targetPath] = {}
+    end
+    table.insert(ctx.scriptHistory[targetPath], currentSource)
+    if #ctx.scriptHistory[targetPath] > 15 then table.remove(ctx.scriptHistory[targetPath], 1) end
 
     -- Terapkan perubahan
     targetInstance.Source = newSource
@@ -851,10 +951,16 @@ end
 				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     if targetInstance:IsA("LuaSourceContainer") then
-        local prevSource = ctx.scriptHistory[targetPath]
-        if prevSource then
+        local historyStack = ctx.scriptHistory[targetPath]
+        if historyStack and type(historyStack) == "table" and #historyStack > 0 then
+            local prevSource = table.remove(historyStack)
             targetInstance.Source = prevSource
-            return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil di-rollback ke versi sebelumnya." }
+            return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil di-rollback ke versi sebelumnya. Sisa backup: " .. #historyStack }
+        elseif type(historyStack) == "string" then
+            -- Kompatibilitas mundur dengan data lama (sebelum FEAT-04)
+            targetInstance.Source = historyStack
+            ctx.scriptHistory[targetPath] = nil
+            return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil di-rollback (versi tunggal/legacy)." }
         else
             return { status = "error", error = "Tidak ada riwayat backup sebelumnya di sesi Studio ini untuk: " .. targetPath }
         end
@@ -890,7 +996,9 @@ end
         game:GetService("ServerScriptService"),
         game:GetService("ReplicatedStorage"),
         game:GetService("StarterPlayer"),
-        game:GetService("StarterGui")
+        game:GetService("StarterGui"),
+        game:GetService("ServerStorage"),
+        game:GetService("Lighting")
     }
 
     local function searchInScript(scriptObj)
@@ -921,16 +1029,15 @@ end
     end
 
     for _, service in ipairs(searchableServices) do
-        pcall(function()
-            local descendants = service:GetDescendants()
-            for _, desc in ipairs(descendants) do
-                if desc:IsA("LuaSourceContainer") then
-                    if searchInScript(desc) then
-                        break
-                    end
+        local descendants = {}
+        pcall(function() descendants = service:GetDescendants() end)
+        for _, desc in ipairs(descendants) do
+            if desc:IsA("LuaSourceContainer") then
+                if searchInScript(desc) then
+                    break
                 end
             end
-        end)
+        end
         if matchCount >= MAX_MATCHES then
             break
         end
@@ -956,13 +1063,16 @@ end
     local results = {}
     
     local searchableServices = {game:GetService("Workspace"), game:GetService("ReplicatedStorage"), game:GetService("ServerScriptService"), game:GetService("StarterGui")}
+    local lowerSearch = string.lower(searchName)
     
     for _, service in ipairs(searchableServices) do
         for _, desc in ipairs(service:GetDescendants()) do
-            if desc.Name == searchName then
+            if string.find(string.lower(desc.Name), lowerSearch, 1, true) then
                 table.insert(results, desc:GetFullName())
+                if #results >= 50 then break end
             end
         end
+        if #results >= 50 then break end
     end
     
     if #results > 0 then
@@ -970,6 +1080,76 @@ end
     else
         return { status = "success", result = "Tidak ditemukan instance dengan nama: " .. searchName }
     end
+end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_set_properties">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">set_properties</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    local success, config = pcall(function() return ctx.HttpService:JSONDecode(data) end)
+    if not success or type(config) ~= "table" then
+        return { status = "error", error = "Format data JSON tidak valid untuk set_properties." }
+    end
+    
+    local applied = {}
+    local errors = {}
+    
+    for prop, val in pairs(config) do
+        local ok, err = pcall(function()
+            local currentVal = targetInstance[prop]
+            if typeof(currentVal) == "Vector3" and type(val) == "table" and #val == 3 then
+                targetInstance[prop] = Vector3.new(val[1], val[2], val[3])
+            elseif typeof(currentVal) == "Color3" and type(val) == "table" and #val == 3 then
+                local r, g, b = val[1], val[2], val[3]
+                if r > 1 or g > 1 or b > 1 then
+                    targetInstance[prop] = Color3.fromRGB(r, g, b)
+                else
+                    targetInstance[prop] = Color3.new(r, g, b)
+                end
+            elseif typeof(currentVal) == "UDim2" and type(val) == "table" and #val == 4 then
+                targetInstance[prop] = UDim2.new(val[1], val[2], val[3], val[4])
+            elseif typeof(currentVal) == "CFrame" and type(val) == "table" then
+                targetInstance[prop] = CFrame.new(unpack(val))
+            elseif typeof(currentVal) == "EnumItem" and type(val) == "string" then
+                local enumType = tostring(currentVal.EnumType)
+                local successEnum, enumValue = pcall(function() return Enum[enumType][val] end)
+                if successEnum and enumValue then
+                    targetInstance[prop] = enumValue
+                else
+                    error("Nilai Enum '" .. val .. "' tidak valid untuk EnumType '" .. enumType .. "'")
+                end
+            else
+                targetInstance[prop] = val
+            end
+        end)
+        
+        if ok then
+            table.insert(applied, prop)
+        else
+            table.insert(errors, prop .. ": " .. tostring(err))
+        end
+    end
+    
+    if #errors > 0 then
+        local successMsg = ""
+        if #applied > 0 then
+            successMsg = "Berhasil mengubah: " .. table.concat(applied, ", ") .. ".\n"
+        end
+        return { 
+            status = #applied > 0 and "success" or "error", 
+            result = successMsg .. "Namun beberapa properti gagal diubah:\n" .. table.concat(errors, "\n") 
+        }
+    end
+    return { status = "success", result = "Berhasil mengubah properti: " .. table.concat(applied, ", ") }
 end
 ]]></ProtectedString>
 			</Properties>
@@ -1458,7 +1638,11 @@ return UIManager
         -- hanya akan membuat AI gagal terus menerus untuk menulis script. 
         -- Error syntax akan ditangkap secara native oleh Roblox Output.
         
-        ctx.scriptHistory[targetPath] = targetInstance.Source
+        if type(ctx.scriptHistory[targetPath]) ~= "table" then
+            ctx.scriptHistory[targetPath] = {}
+        end
+        table.insert(ctx.scriptHistory[targetPath], targetInstance.Source)
+        if #ctx.scriptHistory[targetPath] > 15 then table.remove(ctx.scriptHistory[targetPath], 1) end
         targetInstance.Source = newCode
         return { status = "success", result = "Script '" .. targetInstance.Name .. "' berhasil diperbarui." }
     else

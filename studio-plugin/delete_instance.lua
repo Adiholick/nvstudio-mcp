@@ -19,6 +19,11 @@ return function(targetInstance, data, ctx, targetPath)
     local className = targetInstance.ClassName
     local parentName = targetInstance.Parent and targetInstance.Parent.Name or "nil"
     
+    local childrenCount = #targetInstance:GetDescendants()
+    if childrenCount > 10 and data ~= "force" then
+        return { status = "error", error = "GUARDRAIL: Instance '" .. name .. "' memiliki " .. childrenCount .. " descendants. Jika Anda yakin ingin menghapus seluruhnya beserta isinya, sertakan data='force'." }
+    end
+    
     local success, err = pcall(function()
         targetInstance:Destroy()
     end)

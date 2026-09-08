@@ -84,7 +84,11 @@ return function(targetInstance, data, ctx, targetPath)
     end
 
     -- Simpan backup snapshot sebelum mengaplikasikan patch
-    ctx.scriptHistory[targetPath] = currentSource
+    if type(ctx.scriptHistory[targetPath]) ~= "table" then
+        ctx.scriptHistory[targetPath] = {}
+    end
+    table.insert(ctx.scriptHistory[targetPath], currentSource)
+    if #ctx.scriptHistory[targetPath] > 15 then table.remove(ctx.scriptHistory[targetPath], 1) end
 
     -- Terapkan perubahan
     targetInstance.Source = newSource

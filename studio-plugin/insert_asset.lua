@@ -10,8 +10,12 @@ return function(targetInstance, data, ctx, targetPath)
     end)
     
     if success and model then
-        model.Parent = game.Workspace
-        return { status = "success", result = "Aset berhasil dimasukkan ke Workspace." }
+        if targetInstance == game or targetInstance.ClassName == "DataModel" then
+            model.Parent = game.Workspace
+        else
+            model.Parent = targetInstance
+        end
+        return { status = "success", result = "Aset berhasil dimasukkan ke " .. model.Parent.Name .. "." }
     else
         return { status = "error", error = "Gagal memuat aset. Pastikan Asset ID benar dan akun/plugin Anda memiliki izin (Ownership/Public)." }
     end
