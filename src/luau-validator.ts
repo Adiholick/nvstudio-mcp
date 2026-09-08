@@ -84,6 +84,10 @@ export function validateLuauSyntax(source: string): ValidationResult {
                         j = k + 1;
                         continue;
                     }
+                    // If it ended at end of line, we can't reliably detect it. Let's just avoid bracket counting
+                    if (line[k] === undefined) {
+                        break;
+                    }
                 }
             }
 

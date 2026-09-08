@@ -29,20 +29,30 @@
     local newSuccess, newInst = pcall(function()
         local inst = Instance.new(config.ClassName)
         inst.Parent = targetInstance
-        
-        if config.Properties then
-            for prop, val in pairs(config.Properties) do
-                pcall(function() inst[prop] = val end)
-            end
-        end
         return inst
     end)
     
-    if newSuccess then
-        return { status = "success", result = "Instance '"..config.ClassName.."' berhasil dibuat di " .. targetPath }
-    else
-        return { status = "error", error = "Gagal membuat Instance. Pastikan ClassName valid." }
+    if not newSuccess then
+        return { status = "error", error = "Gagal membuat Instance: " .. tostring(newInst) }
     end
+
+    local propResultMsg = ""
+    if config.Properties and next(config.Properties) then
+        local setPropsFunc = require(script.Parent:FindFirstChild("set_properties"))
+        if setPropsFunc then
+            local propData = ctx.HttpService:JSONEncode(config.Properties)
+            local propRes = setPropsFunc(newInst, propData, ctx, "")
+            if propRes.status == "error" then
+                propResultMsg = " (Namun ada error properti: " .. propRes.result .. ")"
+            elseif propRes.result then
+                propResultMsg = " (" .. propRes.result .. ")"
+            end
+        else
+            propResultMsg = " (Gagal meload set_properties)"
+        end
+    end
+    
+    return { status = "success", result = "Instance '"..config.ClassName.."' berhasil dibuat di " .. targetPath .. propResultMsg }
 end
 ]]></ProtectedString>
 			</Properties>
@@ -58,6 +68,10 @@ end
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    if targetInstance == game or targetInstance.Parent == game then
+        return { status = "error", error = "Tidak dapat menghapus root DataModel atau Service utama!" }
+    end
+
     -- Guardrail: Cegah penghapusan Service utama
     local protectedServices = {
         "Workspace", "Players", "Lighting", "MaterialService", "NetworkClient", 
@@ -118,7 +132,7 @@ end
     local wrappedCode = "return function()\n" .. code .. "\nend"
     
     local moduleScript = Instance.new("ModuleScript")
-    moduleScript.Name = "AI_Execute_Temp"
+    moduleScript.Name = "AI_Execute_" .. HttpService:GenerateGUID(false):gsub("-", "")
     moduleScript.Source = wrappedCode
     
     -- Taruh di ReplicatedStorage sementara agar bisa di-require
@@ -166,7 +180,7 @@ end
     pcall(function() moduleScript:Destroy() end)
     
     if not isFinished then
-        return { status = "error", error = "Timeout 5 detik terlampaui. Kemungkinan ada infinite loop tanpa task.wait()." }
+        return { status = "error", error = "Timeout 5 detik terlampaui. Thread mungkin tetap berjalan di background jika terjebak dalam infinite loop tanpa task.wait(). PASTIKAN menambahkan task.wait() di dalam loop komputasi berat." }
     end
     
     if execError then
@@ -217,7 +231,8 @@ end
     
     local fillSuccess, err = pcall(function()
         local terrain = game.Workspace.Terrain
-        local materialEnum = Enum.Material[config.Material] or Enum.Material.Grass
+        local matOk, materialEnum = pcall(function() return Enum.Material[config.Material] end)
+        if not matOk then materialEnum = Enum.Material.Grass end
         
         local size = Vector3.new(config.Size[1], config.Size[2], config.Size[3])
         local position = Vector3.new(config.Position[1], config.Position[2], config.Position[3])
@@ -280,11 +295,15 @@ end
     local totalNodes = 0
     local HARD_LIMIT = 2000 -- safeguard
     
+    local hardLimitReached = false
+    
     local function traverse(inst, currentDepth)
+        if hardLimitReached then return nil end
         totalNodes = totalNodes + 1
         local node = { name = inst.Name, className = inst.ClassName }
         
         if totalNodes >= HARD_LIMIT then
+            hardLimitReached = true
             return { name = "... (terpotong, melebihi limit " .. HARD_LIMIT .. " nodes)", className = "Warning" }
         end
         
@@ -300,7 +319,10 @@ end
         if #children > 0 then
             node.children = {}
             for _, child in ipairs(children) do
-                table.insert(node.children, traverse(child, currentDepth + 1))
+                local childNode = traverse(child, currentDepth + 1)
+                if childNode then
+                    table.insert(node.children, childNode)
+                end
             end
         end
         
@@ -430,7 +452,8 @@ end
 				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
     local InsertService = game:GetService("InsertService")
-    local assetId = tonumber(data)
+    local rawId = tostring(data or ""):gsub("rbxassetid://", ""):gsub("%s+", "")
+    local assetId = tonumber(rawId)
     if not assetId then
         return { status = "error", error = "Asset ID harus berupa angka yang valid." }
     end
@@ -497,6 +520,7 @@ local ctx = {
 	recentLogs    = {},
 	HttpService   = HttpService,
 	studioId      = STUDIO_ID,
+	getInstanceFromPath = nil -- akan di-bind di bawah
 }
 local MAX_LOGS           = 50
 local isRunning          = false  -- apakah loop aktif
@@ -509,6 +533,7 @@ local serverReachable    = false  -- apakah server Node.js reachable
 local RECONNECT_DELAY_INITIAL = 1.5
 local RECONNECT_DELAY_MAX     = 1.5
 local reconnectDelay          = RECONNECT_DELAY_INITIAL
+local currentLoopId           = nil
 
 -- ── Skills (ModuleScript) ─────────────────────────────────────────────────────
 local skills = {}
@@ -588,7 +613,9 @@ LogService.MessageOut:Connect(addSystemLog)
 
 -- ── Helper: Resolve path ke Instance ─────────────────────────────────────────
 local function getInstanceFromPath(pathString)
+	if type(pathString) ~= "string" or pathString == "" then return nil end
 	local parts   = string.split(pathString, ".")
+	if #parts == 0 then return nil end
 	local current = game
 	if parts[1] == "game" then table.remove(parts, 1) end
 	pcall(function()
@@ -619,6 +646,8 @@ local function getInstanceFromPath(pathString)
 	return current
 end
 
+ctx.getInstanceFromPath = getInstanceFromPath
+
 -- ── Proses Task dari Server ───────────────────────────────────────────────────
 local function processTask(taskData)
 	if not taskData or not taskData.id or not taskData.command then return nil end
@@ -629,7 +658,11 @@ local function processTask(taskData)
 
 	local targetInstance = getInstanceFromPath(taskData.target)
 	if not targetInstance then
-		return { id = taskData.id, status = "error", error = "Target path tidak ditemukan: " .. tostring(taskData.target) }
+		if taskData.target == "" or taskData.target == "nil" then
+			targetInstance = game
+		else
+			return { id = taskData.id, status = "error", error = "Target path tidak ditemukan: " .. tostring(taskData.target) }
+		end
 	end
 
 	local skillFunc = skills[taskData.command]
@@ -682,6 +715,7 @@ end
 local function handleSSELine(line)
 	-- Format SSE: "data: {...json...}"
 	local payload = line
+	if line:sub(1, 6) == "event:" then return end
 	if line:sub(1, 5) == "data:" then
 		payload = line:sub(6):gsub("^%s+", ""):gsub("%s+$", "")
 	end
@@ -703,8 +737,12 @@ local function handleSSELine(line)
 		local changed = (mcpAgentActive ~= newActive)
 		mcpAgentActive = newActive
 		if ui then
-			-- Jaga status tetap Connected selama bridge server hidup
-			ui:setStatus("connected")
+			if mcpAgentActive then
+				ui:setStatus("connected")
+			else
+				ui:setStatus("server_connected")
+			end
+			
 			if newActive and changed then
 				ui:addLog("[System] ✅ IDE Agent (Antigravity) aktif.", Color3.fromRGB(100, 255, 100))
 			elseif not newActive and changed then
@@ -749,13 +787,16 @@ function startConnectionLoop()
 	isManualDisconnect = false
 	reconnectDelay = RECONNECT_DELAY_INITIAL
 
+	local loopId = HttpService:GenerateGUID(false)
+	currentLoopId = loopId
+
 	if ui then
 		ui:addLog("[System] NVStudio MCP v2.1.8 — Menghubungkan ke server...", Color3.fromRGB(200, 200, 200))
 	end
 
 	local consecutiveErrors = 0
 
-	while isRunning and not isManualDisconnect do
+	while isRunning and not isManualDisconnect and currentLoopId == loopId do
 		-- Stream / polling snapshot dari server
 		local streamOk, streamRaw = pcall(function()
 			return HttpService:GetAsync(
@@ -771,7 +812,7 @@ function startConnectionLoop()
 			if not serverReachable then
 				serverReachable = true
 				if ui then
-					ui:setStatus("connected")
+					ui:setStatus(mcpAgentActive and "connected" or "server_connected")
 					ui:addLog("[System] ✅ Server MCP terhubung & siap.", Color3.fromRGB(100, 255, 150))
 				end
 			end
@@ -861,6 +902,10 @@ return function(targetInstance, data, ctx, targetPath)
         local replacementContent = payload.replacement_content
         local allowMultiple = payload.allow_multiple or false
 
+        if targetContent == "" then
+            return { status = "error", error = "target_content tidak boleh berupa string kosong." }
+        end
+
         -- Escape magic characters for string.gsub if needed, or use string.find manually.
         -- string.gsub doesn't do plain text replacement directly without escaping.
         -- We'll write a plain text replace function.
@@ -882,16 +927,28 @@ return function(targetInstance, data, ctx, targetPath)
             return res, count
         end
 
-        local _, occurrences = plainReplace(currentSource, targetContent, replacementContent)
+        local function countOccurrences(str, pattern)
+            local count = 0
+            local startIdx = 1
+            while true do
+                local findStart, findEnd = string.find(str, pattern, startIdx, true)
+                if not findStart then break end
+                count = count + 1
+                startIdx = findEnd + 1
+                if count > 1 and not allowMultiple then break end
+            end
+            return count
+        end
+
+        local occurrences = countOccurrences(currentSource, targetContent)
         
         if occurrences == 0 then
             return { status = "error", error = "target_content tidak ditemukan di dalam script." }
         elseif occurrences > 1 and not allowMultiple then
-            return { status = "error", error = "target_content ditemukan " .. occurrences .. " kali. Tolong sertakan baris konteks lebih banyak agar unik, atau set allow_multiple = true." }
+            return { status = "error", error = "target_content ditemukan lebih dari 1 kali. Tolong sertakan baris konteks lebih banyak agar unik, atau set allow_multiple = true." }
         end
 
         newSource, affectedLines = plainReplace(currentSource, targetContent, replacementContent)
-        affectedLines = affectedLines -- not exact line count, but occurrences count
     
     -- Mode 2: Line Range Replace
     elseif payload.start_line and payload.end_line and payload.replacement_content then
@@ -982,10 +1039,10 @@ end
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-    local query = tostring(data)
-    if not query or query == "" then
+    if not data or data == "" or data == "nil" then
         return { status = "error", error = "Query pencarian tidak boleh kosong." }
     end
+    local query = tostring(data)
 
     local matches = {}
     local matchCount = 0
@@ -1028,18 +1085,32 @@ end
         return false
     end
 
-    for _, service in ipairs(searchableServices) do
+    if targetInstance and targetInstance ~= game then
         local descendants = {}
-        pcall(function() descendants = service:GetDescendants() end)
+        pcall(function() descendants = targetInstance:GetDescendants() end)
         for _, desc in ipairs(descendants) do
+            if matchCount >= MAX_MATCHES then break end
             if desc:IsA("LuaSourceContainer") then
                 if searchInScript(desc) then
                     break
                 end
             end
         end
-        if matchCount >= MAX_MATCHES then
-            break
+    else
+        for _, service in ipairs(searchableServices) do
+            local descendants = {}
+            pcall(function() descendants = service:GetDescendants() end)
+            for _, desc in ipairs(descendants) do
+                if matchCount >= MAX_MATCHES then break end
+                if desc:IsA("LuaSourceContainer") then
+                    if searchInScript(desc) then
+                        break
+                    end
+                end
+            end
+            if matchCount >= MAX_MATCHES then
+                break
+            end
         end
     end
 
@@ -1059,20 +1130,36 @@ end
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
+    if not data or data == "" or data == "nil" then
+        return { status = "error", error = "Query pencarian tidak boleh kosong." }
+    end
     local searchName = tostring(data)
     local results = {}
     
     local searchableServices = {game:GetService("Workspace"), game:GetService("ReplicatedStorage"), game:GetService("ServerScriptService"), game:GetService("StarterGui")}
     local lowerSearch = string.lower(searchName)
     
-    for _, service in ipairs(searchableServices) do
-        for _, desc in ipairs(service:GetDescendants()) do
-            if string.find(string.lower(desc.Name), lowerSearch, 1, true) then
-                table.insert(results, desc:GetFullName())
-                if #results >= 50 then break end
-            end
+    local nodesChecked = 0
+    local function search(inst)
+        nodesChecked = nodesChecked + 1
+        if nodesChecked % 1000 == 0 then task.wait() end
+        if string.find(inst.Name:lower(), searchName:lower(), 1, true) then
+            table.insert(results, inst:GetFullName() .. " (" .. inst.ClassName .. ")")
         end
-        if #results >= 50 then break end
+        if #results >= 50 then return end
+        for _, child in ipairs(inst:GetChildren()) do
+            search(child)
+            if #results >= 50 then break end
+        end
+    end
+
+    if targetInstance and targetInstance ~= game then
+        search(targetInstance)
+    else
+        for _, service in ipairs(searchableServices) do
+            search(service)
+            if #results >= 50 then break end
+        end
     end
     
     if #results > 0 then
@@ -1126,6 +1213,22 @@ end
                     targetInstance[prop] = enumValue
                 else
                     error("Nilai Enum '" .. val .. "' tidak valid untuk EnumType '" .. enumType .. "'")
+                end
+            elseif prop == "Parent" or prop == "PrimaryPart" or string.match(prop, ".*Value$") then
+                -- Evaluasi properti relasional
+                if typeof(currentVal) == "Instance" or typeof(targetInstance[prop]) == "Instance" or val == nil then
+                    if type(val) == "string" and ctx.getInstanceFromPath then
+                        local resolved = ctx.getInstanceFromPath(val)
+                        if resolved then
+                            targetInstance[prop] = resolved
+                        else
+                            error("Instance target tidak ditemukan pada path: " .. val)
+                        end
+                    else
+                        targetInstance[prop] = val
+                    end
+                else
+                    targetInstance[prop] = val
                 end
             else
                 targetInstance[prop] = val
@@ -1261,7 +1364,7 @@ function UIManager.init(pluginInstance, studioId)
 
     -- Version
     local versionLabel = Instance.new("TextLabel")
-    versionLabel.Text = "v2.1.8"
+    versionLabel.Text = "v2.2.0"
     versionLabel.Font = Enum.Font.Gotham
     versionLabel.TextSize = 11
     versionLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
@@ -1585,9 +1688,9 @@ function UIManager:setStatus(stateStr)
         -- Server reachable, tampilkan Connected meskipun agent (IDE) belum konek via stdio
         self.connectBtn.Text = "  Disconnect"
         self._updateBtnBaseColor(Color3.fromRGB(180, 50, 50))
-        self.statusLabel.Text = "● Connected"
-        self.statusLabel.TextColor3 = Color3.fromRGB(100, 230, 120)
-        self.termStroke.Color = Color3.fromRGB(50, 120, 60)
+        self.statusLabel.Text = "● IDE Disconnected"
+        self.statusLabel.TextColor3 = Color3.fromRGB(255, 180, 50)
+        self.termStroke.Color = Color3.fromRGB(120, 80, 20)
 
     elseif stateStr == "connected" then
         self.connectBtn.Text = "  Disconnect"

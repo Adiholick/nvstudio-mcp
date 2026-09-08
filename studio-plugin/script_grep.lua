@@ -1,8 +1,8 @@
 return function(targetInstance, data, ctx, targetPath)
-    local query = tostring(data)
-    if not query or query == "" then
+    if not data or data == "" or data == "nil" then
         return { status = "error", error = "Query pencarian tidak boleh kosong." }
     end
+    local query = tostring(data)
 
     local matches = {}
     local matchCount = 0
@@ -45,18 +45,32 @@ return function(targetInstance, data, ctx, targetPath)
         return false
     end
 
-    for _, service in ipairs(searchableServices) do
+    if targetInstance and targetInstance ~= game then
         local descendants = {}
-        pcall(function() descendants = service:GetDescendants() end)
+        pcall(function() descendants = targetInstance:GetDescendants() end)
         for _, desc in ipairs(descendants) do
+            if matchCount >= MAX_MATCHES then break end
             if desc:IsA("LuaSourceContainer") then
                 if searchInScript(desc) then
                     break
                 end
             end
         end
-        if matchCount >= MAX_MATCHES then
-            break
+    else
+        for _, service in ipairs(searchableServices) do
+            local descendants = {}
+            pcall(function() descendants = service:GetDescendants() end)
+            for _, desc in ipairs(descendants) do
+                if matchCount >= MAX_MATCHES then break end
+                if desc:IsA("LuaSourceContainer") then
+                    if searchInScript(desc) then
+                        break
+                    end
+                end
+            end
+            if matchCount >= MAX_MATCHES then
+                break
+            end
         end
     end
 

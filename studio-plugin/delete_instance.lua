@@ -1,4 +1,8 @@
 return function(targetInstance, data, ctx, targetPath)
+    if targetInstance == game or targetInstance.Parent == game then
+        return { status = "error", error = "Tidak dapat menghapus root DataModel atau Service utama!" }
+    end
+
     -- Guardrail: Cegah penghapusan Service utama
     local protectedServices = {
         "Workspace", "Players", "Lighting", "MaterialService", "NetworkClient", 

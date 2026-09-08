@@ -10,7 +10,7 @@ return function(targetInstance, data, ctx, targetPath)
     local wrappedCode = "return function()\n" .. code .. "\nend"
     
     local moduleScript = Instance.new("ModuleScript")
-    moduleScript.Name = "AI_Execute_Temp"
+    moduleScript.Name = "AI_Execute_" .. HttpService:GenerateGUID(false):gsub("-", "")
     moduleScript.Source = wrappedCode
     
     -- Taruh di ReplicatedStorage sementara agar bisa di-require
@@ -58,7 +58,7 @@ return function(targetInstance, data, ctx, targetPath)
     pcall(function() moduleScript:Destroy() end)
     
     if not isFinished then
-        return { status = "error", error = "Timeout 5 detik terlampaui. Kemungkinan ada infinite loop tanpa task.wait()." }
+        return { status = "error", error = "Timeout 5 detik terlampaui. Thread mungkin tetap berjalan di background jika terjebak dalam infinite loop tanpa task.wait(). PASTIKAN menambahkan task.wait() di dalam loop komputasi berat." }
     end
     
     if execError then

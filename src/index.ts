@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { validateLuauSyntax } from './luau-validator';
 
-const HISTORY_DIR = path.join(process.cwd(), '.history');
+const HISTORY_DIR = path.join(__dirname, '..', '.history');
 if (!fs.existsSync(HISTORY_DIR)) {
     fs.mkdirSync(HISTORY_DIR, { recursive: true });
 }
@@ -26,7 +26,7 @@ function backupScript(target: string, code: string) {
 const isDaemon = process.argv.includes('--daemon') || process.argv.includes('-d');
 
 // 1. Impor dan jalankan server Express lokal di port 3055
-startBridgeServer(3055);
+startBridgeServer(3055, isDaemon);
 
 // 2. Inisialisasi server MCP
 const pkg = require('../package.json');
@@ -181,13 +181,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             throw new Error(bridgeJson.error);
           }
           result = bridgeJson.result;
+        } else {
+          throw new Error(`Bridge server returned HTTP ${bridgeRes.status}`);
         }
       } catch (err: any) {
         if (forwardedToBridge) {
           throw err;
         }
-        // Fallback in-process jika HTTP gagal dihubungi
-        result = await addTaskToQueue(command, target, data);
+        throw new Error("Gagal menghubungi server Bridge. Pastikan server daemon berjalan di port 3055.");
       }
     }
 

@@ -1,6 +1,7 @@
 return function(targetInstance, data, ctx, targetPath)
     local InsertService = game:GetService("InsertService")
-    local assetId = tonumber(data)
+    local rawId = tostring(data or ""):gsub("rbxassetid://", ""):gsub("%s+", "")
+    local assetId = tonumber(rawId)
     if not assetId then
         return { status = "error", error = "Asset ID harus berupa angka yang valid." }
     end

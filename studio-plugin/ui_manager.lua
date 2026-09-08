@@ -95,7 +95,7 @@ function UIManager.init(pluginInstance, studioId)
 
     -- Version
     local versionLabel = Instance.new("TextLabel")
-    versionLabel.Text = "v2.1.8"
+    versionLabel.Text = "v2.2.0"
     versionLabel.Font = Enum.Font.Gotham
     versionLabel.TextSize = 11
     versionLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
@@ -419,9 +419,9 @@ function UIManager:setStatus(stateStr)
         -- Server reachable, tampilkan Connected meskipun agent (IDE) belum konek via stdio
         self.connectBtn.Text = "  Disconnect"
         self._updateBtnBaseColor(Color3.fromRGB(180, 50, 50))
-        self.statusLabel.Text = "● Connected"
-        self.statusLabel.TextColor3 = Color3.fromRGB(100, 230, 120)
-        self.termStroke.Color = Color3.fromRGB(50, 120, 60)
+        self.statusLabel.Text = "● IDE Disconnected"
+        self.statusLabel.TextColor3 = Color3.fromRGB(255, 180, 50)
+        self.termStroke.Color = Color3.fromRGB(120, 80, 20)
 
     elseif stateStr == "connected" then
         self.connectBtn.Text = "  Disconnect"

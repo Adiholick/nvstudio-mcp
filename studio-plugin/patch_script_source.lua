@@ -24,6 +24,10 @@ return function(targetInstance, data, ctx, targetPath)
         local replacementContent = payload.replacement_content
         local allowMultiple = payload.allow_multiple or false
 
+        if targetContent == "" then
+            return { status = "error", error = "target_content tidak boleh berupa string kosong." }
+        end
+
         -- Escape magic characters for string.gsub if needed, or use string.find manually.
         -- string.gsub doesn't do plain text replacement directly without escaping.
         -- We'll write a plain text replace function.
@@ -45,16 +49,28 @@ return function(targetInstance, data, ctx, targetPath)
             return res, count
         end
 
-        local _, occurrences = plainReplace(currentSource, targetContent, replacementContent)
+        local function countOccurrences(str, pattern)
+            local count = 0
+            local startIdx = 1
+            while true do
+                local findStart, findEnd = string.find(str, pattern, startIdx, true)
+                if not findStart then break end
+                count = count + 1
+                startIdx = findEnd + 1
+                if count > 1 and not allowMultiple then break end
+            end
+            return count
+        end
+
+        local occurrences = countOccurrences(currentSource, targetContent)
         
         if occurrences == 0 then
             return { status = "error", error = "target_content tidak ditemukan di dalam script." }
         elseif occurrences > 1 and not allowMultiple then
-            return { status = "error", error = "target_content ditemukan " .. occurrences .. " kali. Tolong sertakan baris konteks lebih banyak agar unik, atau set allow_multiple = true." }
+            return { status = "error", error = "target_content ditemukan lebih dari 1 kali. Tolong sertakan baris konteks lebih banyak agar unik, atau set allow_multiple = true." }
         end
 
         newSource, affectedLines = plainReplace(currentSource, targetContent, replacementContent)
-        affectedLines = affectedLines -- not exact line count, but occurrences count
     
     -- Mode 2: Line Range Replace
     elseif payload.start_line and payload.end_line and payload.replacement_content then

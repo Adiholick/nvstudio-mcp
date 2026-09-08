@@ -7,11 +7,15 @@ return function(targetInstance, data, ctx, targetPath)
     local totalNodes = 0
     local HARD_LIMIT = 2000 -- safeguard
     
+    local hardLimitReached = false
+    
     local function traverse(inst, currentDepth)
+        if hardLimitReached then return nil end
         totalNodes = totalNodes + 1
         local node = { name = inst.Name, className = inst.ClassName }
         
         if totalNodes >= HARD_LIMIT then
+            hardLimitReached = true
             return { name = "... (terpotong, melebihi limit " .. HARD_LIMIT .. " nodes)", className = "Warning" }
         end
         
@@ -27,7 +31,10 @@ return function(targetInstance, data, ctx, targetPath)
         if #children > 0 then
             node.children = {}
             for _, child in ipairs(children) do
-                table.insert(node.children, traverse(child, currentDepth + 1))
+                local childNode = traverse(child, currentDepth + 1)
+                if childNode then
+                    table.insert(node.children, childNode)
+                end
             end
         end
         

@@ -31,6 +31,7 @@ local ctx = {
 	recentLogs    = {},
 	HttpService   = HttpService,
 	studioId      = STUDIO_ID,
+	getInstanceFromPath = nil -- akan di-bind di bawah
 }
 local MAX_LOGS           = 50
 local isRunning          = false  -- apakah loop aktif
@@ -43,6 +44,7 @@ local serverReachable    = false  -- apakah server Node.js reachable
 local RECONNECT_DELAY_INITIAL = 1.5
 local RECONNECT_DELAY_MAX     = 1.5
 local reconnectDelay          = RECONNECT_DELAY_INITIAL
+local currentLoopId           = nil
 
 -- ── Skills (ModuleScript) ─────────────────────────────────────────────────────
 local skills = {}
@@ -122,7 +124,9 @@ LogService.MessageOut:Connect(addSystemLog)
 
 -- ── Helper: Resolve path ke Instance ─────────────────────────────────────────
 local function getInstanceFromPath(pathString)
+	if type(pathString) ~= "string" or pathString == "" then return nil end
 	local parts   = string.split(pathString, ".")
+	if #parts == 0 then return nil end
 	local current = game
 	if parts[1] == "game" then table.remove(parts, 1) end
 	pcall(function()
@@ -153,6 +157,8 @@ local function getInstanceFromPath(pathString)
 	return current
 end
 
+ctx.getInstanceFromPath = getInstanceFromPath
+
 -- ── Proses Task dari Server ───────────────────────────────────────────────────
 local function processTask(taskData)
 	if not taskData or not taskData.id or not taskData.command then return nil end
@@ -163,7 +169,11 @@ local function processTask(taskData)
 
 	local targetInstance = getInstanceFromPath(taskData.target)
 	if not targetInstance then
-		return { id = taskData.id, status = "error", error = "Target path tidak ditemukan: " .. tostring(taskData.target) }
+		if taskData.target == "" or taskData.target == "nil" then
+			targetInstance = game
+		else
+			return { id = taskData.id, status = "error", error = "Target path tidak ditemukan: " .. tostring(taskData.target) }
+		end
 	end
 
 	local skillFunc = skills[taskData.command]
@@ -216,6 +226,7 @@ end
 local function handleSSELine(line)
 	-- Format SSE: "data: {...json...}"
 	local payload = line
+	if line:sub(1, 6) == "event:" then return end
 	if line:sub(1, 5) == "data:" then
 		payload = line:sub(6):gsub("^%s+", ""):gsub("%s+$", "")
 	end
@@ -237,8 +248,12 @@ local function handleSSELine(line)
 		local changed = (mcpAgentActive ~= newActive)
 		mcpAgentActive = newActive
 		if ui then
-			-- Jaga status tetap Connected selama bridge server hidup
-			ui:setStatus("connected")
+			if mcpAgentActive then
+				ui:setStatus("connected")
+			else
+				ui:setStatus("server_connected")
+			end
+			
 			if newActive and changed then
 				ui:addLog("[System] ✅ IDE Agent (Antigravity) aktif.", Color3.fromRGB(100, 255, 100))
 			elseif not newActive and changed then
@@ -283,13 +298,16 @@ function startConnectionLoop()
 	isManualDisconnect = false
 	reconnectDelay = RECONNECT_DELAY_INITIAL
 
+	local loopId = HttpService:GenerateGUID(false)
+	currentLoopId = loopId
+
 	if ui then
 		ui:addLog("[System] NVStudio MCP v2.1.8 — Menghubungkan ke server...", Color3.fromRGB(200, 200, 200))
 	end
 
 	local consecutiveErrors = 0
 
-	while isRunning and not isManualDisconnect do
+	while isRunning and not isManualDisconnect and currentLoopId == loopId do
 		-- Stream / polling snapshot dari server
 		local streamOk, streamRaw = pcall(function()
 			return HttpService:GetAsync(
@@ -305,7 +323,7 @@ function startConnectionLoop()
 			if not serverReachable then
 				serverReachable = true
 				if ui then
-					ui:setStatus("connected")
+					ui:setStatus(mcpAgentActive and "connected" or "server_connected")
 					ui:addLog("[System] ✅ Server MCP terhubung & siap.", Color3.fromRGB(100, 255, 150))
 				end
 			end

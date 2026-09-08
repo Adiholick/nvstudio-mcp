@@ -59,11 +59,14 @@ function enqueueForStudio(studioId: string | null, event: Record<string, unknown
     if (studioId) {
         // Event untuk studio tertentu
         if (!studioEventQueues.has(studioId)) studioEventQueues.set(studioId, []);
-        studioEventQueues.get(studioId)!.push(event);
+        const q = studioEventQueues.get(studioId)!;
+        q.push(event);
+        if (q.length > 100) q.shift();
     } else {
         // Broadcast ke semua studio yang terdaftar
-        for (const [sid] of studioEventQueues) {
-            studioEventQueues.get(sid)!.push(event);
+        for (const [sid, q] of studioEventQueues.entries()) {
+            q.push(event);
+            if (q.length > 100) q.shift();
         }
     }
 }
@@ -110,8 +113,6 @@ function broadcastStatus() {
         serverVersion: SERVER_VERSION,
     };
     broadcastEvent('status', statusEvent);
-    // Juga enqueue untuk Studio yang belum polling saat ini
-    enqueueForStudio(null, { kind: 'status', ...statusEvent });
 }
 
 /**
@@ -126,15 +127,14 @@ function broadcastTask(task: Task) {
         data: task.data ?? null,
         remainingMs: 29000,
     };
-    broadcastEvent('request', taskEvent);
-    // Juga enqueue untuk Studio yang sedang tidak polling
     enqueueForStudio(null, { kind: 'request', ...taskEvent });
 }
 
 // ── Logging ───────────────────────────────────────────────────────────────────
+let logCounter = 0;
 function addLog(io: Server, type: ActivityLog['type'], message: string) {
     const log: ActivityLog = {
-        id: Date.now().toString(),
+        id: `${Date.now()}-${++logCounter}`,
         time: new Date().toLocaleTimeString('id-ID'),
         type,
         message,
@@ -158,6 +158,9 @@ function killZombieOnPort(port: number): boolean {
             const lines = output.trim().split('\n');
             for (const line of lines) {
                 const parts = line.trim().split(/\s+/);
+                const localAddress = parts[1];
+                if (!localAddress || !localAddress.endsWith(`:${port}`)) continue;
+                
                 const pid = parts[parts.length - 1];
                 if (pid && pid !== '0' && pid !== String(process.pid)) {
                     try {
@@ -182,7 +185,7 @@ function killZombieOnPort(port: number): boolean {
     }
 }
 
-export function startBridgeServer(port: number = 3055) {
+export function startBridgeServer(port: number, isDaemon: boolean = false) {
     const app = express();
     const httpServer = createServer(app);
     const io = new Server(httpServer, { cors: { origin: '*' } });
@@ -240,7 +243,7 @@ export function startBridgeServer(port: number = 3055) {
             io.emit('studio-status', { connected: true, studioCount: studioEventQueues.size, studioId });
             addLog(io, 'system', `Studio terdaftar. (ID: ${studioId.substring(0, 8)}…, Total: ${studioEventQueues.size})`);
 
-            if (!dashboardOpened) {
+            if (!isDaemon && !dashboardOpened) {
                 dashboardOpened = true;
                 const url = `http://localhost:${port}`;
                 const startCmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
@@ -284,19 +287,21 @@ export function startBridgeServer(port: number = 3055) {
         res.setHeader('X-Accel-Buffering', 'no');
         res.flushHeaders();
 
+        let silenceTimer: NodeJS.Timeout;
         const heartbeatTimer = setInterval(() => {
             try {
                 const payload = JSON.stringify({
                     kind: 'heartbeat',
                     timestamp: Date.now(),
-                    mcpConnected: taskQueue.length > 0 || totalTasks > 0,
+                    mcpConnected,
                     serverVersion: SERVER_VERSION,
                 });
                 res.write(`data: ${payload}\n\n`);
+                silenceTimer.refresh();
             } catch { cleanup(); }
         }, 5000);
 
-        const silenceTimer = setTimeout(() => cleanup(), 60000);
+        silenceTimer = setTimeout(() => cleanup(), 60000);
         const peer: SsePeer = { studioId, res, connectedAt: Date.now(), heartbeatTimer, silenceTimer };
         ssePeers.set(studioId, peer);
 
@@ -372,6 +377,12 @@ export function startBridgeServer(port: number = 3055) {
             const pollRes = waitingPollers.shift();
             const index = taskQueue.findIndex(t => t.id === task.id);
             if (index !== -1) taskQueue.splice(index, 1);
+            
+            for (const queue of studioEventQueues.values()) {
+                const qIndex = queue.findIndex((e: any) => e.requestId === task.id);
+                if (qIndex !== -1) queue.splice(qIndex, 1);
+            }
+            
             addLog(io, 'task', `[Legacy] Mengirim perintah '${task.command}' ke Studio.`);
             pollRes?.json(task);
         }

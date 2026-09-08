@@ -31,6 +31,22 @@ return function(targetInstance, data, ctx, targetPath)
                 else
                     error("Nilai Enum '" .. val .. "' tidak valid untuk EnumType '" .. enumType .. "'")
                 end
+            elseif prop == "Parent" or prop == "PrimaryPart" or string.match(prop, ".*Value$") then
+                -- Evaluasi properti relasional
+                if typeof(currentVal) == "Instance" or typeof(targetInstance[prop]) == "Instance" or val == nil then
+                    if type(val) == "string" and ctx.getInstanceFromPath then
+                        local resolved = ctx.getInstanceFromPath(val)
+                        if resolved then
+                            targetInstance[prop] = resolved
+                        else
+                            error("Instance target tidak ditemukan pada path: " .. val)
+                        end
+                    else
+                        targetInstance[prop] = val
+                    end
+                else
+                    targetInstance[prop] = val
+                end
             else
                 targetInstance[prop] = val
             end

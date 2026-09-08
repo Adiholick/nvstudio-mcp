@@ -45,7 +45,15 @@ export function addTaskToQueue(
     pendingTasks.set(id, { resolve, reject, timer });
     taskQueue.push(task);
     if (taskQueue.length > 50) {
-      taskQueue.shift();
+      const droppedTask = taskQueue.shift();
+      if (droppedTask) {
+        const pending = pendingTasks.get(droppedTask.id);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error("Timeout: Antrean Studio penuh, task dibuang."));
+          pendingTasks.delete(droppedTask.id);
+        }
+      }
     }
     taskEmitter.emit('new_task', task);
   });
@@ -67,6 +75,9 @@ export function resolvePendingTask(
 
   clearTimeout(pending.timer);
   pendingTasks.delete(id);
+  
+  const index = taskQueue.findIndex(t => t.id === id);
+  if (index !== -1) taskQueue.splice(index, 1);
 
   if (status === "success") {
     pending.resolve(result);

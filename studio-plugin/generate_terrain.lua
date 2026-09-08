@@ -6,7 +6,8 @@ return function(targetInstance, data, ctx, targetPath)
     
     local fillSuccess, err = pcall(function()
         local terrain = game.Workspace.Terrain
-        local materialEnum = Enum.Material[config.Material] or Enum.Material.Grass
+        local matOk, materialEnum = pcall(function() return Enum.Material[config.Material] end)
+        if not matOk then materialEnum = Enum.Material.Grass end
         
         local size = Vector3.new(config.Size[1], config.Size[2], config.Size[3])
         local position = Vector3.new(config.Position[1], config.Position[2], config.Position[3])
