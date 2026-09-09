@@ -5,7 +5,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { startBridgeServer, isBridgeHosting, setMcpConnected } from "./roblox-bridge";
+import { startBridgeServer, isBridgeHosting, setMcpConnected, isStudioConnected } from "./roblox-bridge";
 import { addTaskToQueue } from "./task-queue";
 import fs from 'fs';
 import path from 'path';
@@ -159,6 +159,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let result: any;
     if (isBridgeHosting) {
       // Instance ini sendiri yang meng-host bridge server
+      if (!isStudioConnected()) {
+        await new Promise(r => setTimeout(r, 2000));
+        if (!isStudioConnected()) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  status: "error",
+                  error: "Roblox Studio tidak terdeteksi aktif. Pastikan Roblox Studio dibuka, place telah dimuat, dan plugin nvstudio-mcp dalam status terhubung.",
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
       result = await addTaskToQueue(command, target, data);
     } else {
       // Bridge server aktif di proses background lain (port 3055)

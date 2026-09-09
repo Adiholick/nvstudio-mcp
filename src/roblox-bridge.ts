@@ -47,13 +47,22 @@ const studioLastSeen = new Map<string, number>();
 
 setInterval(() => {
     const now = Date.now();
+    let changed = false;
     for (const [sid, lastSeen] of studioLastSeen.entries()) {
-        if (now - lastSeen > 60000) {
+        if (now - lastSeen > 6000) {
             studioEventQueues.delete(sid);
             studioLastSeen.delete(sid);
+            changed = true;
         }
     }
-}, 30000);
+    if (changed) {
+        broadcastStatus();
+    }
+}, 3000);
+
+export function isStudioConnected(): boolean {
+    return studioEventQueues.size > 0;
+}
 
 function enqueueForStudio(studioId: string | null, event: Record<string, unknown>) {
     if (studioId) {
@@ -109,7 +118,7 @@ function sendEvent(peer: SsePeer, kind: string, payload: Record<string, unknown>
 function broadcastStatus() {
     const statusEvent = {
         mcpConnected,
-        studioCount: Math.max(ssePeers.size, studioEventQueues.size),
+        studioCount: studioEventQueues.size,
         serverVersion: SERVER_VERSION,
     };
     broadcastEvent('status', statusEvent);
@@ -199,13 +208,13 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
     io.on('connection', (socket) => {
         socket.emit('init', {
             logs: activityLogs,
-            stats: { totalTasks, successCount, errorCount, sessionStart, studioConnected: Math.max(ssePeers.size, studioEventQueues.size) > 0, port },
+            stats: { totalTasks, successCount, errorCount, sessionStart, studioConnected: studioEventQueues.size > 0, port },
         });
     });
 
     // ── /api/stats ─────────────────────────────────────────────────────────────
     app.get('/api/stats', (req, res) => {
-        const activeStudios = Math.max(ssePeers.size, studioEventQueues.size);
+        const activeStudios = studioEventQueues.size;
         res.json({
             totalTasks, successCount, errorCount, sessionStart,
             studioConnected: activeStudios > 0,
@@ -218,7 +227,7 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
     // ── /api/ping ─────────────────────────────────────────────────────────────
     app.get('/api/ping', (req, res) => {
         const uptime = Math.floor((Date.now() - new Date(sessionStart).getTime()) / 1000);
-        const activeStudios = Math.max(ssePeers.size, studioEventQueues.size);
+        const activeStudios = studioEventQueues.size;
         res.json({ 
             status: 'ok', 
             version: SERVER_VERSION,
@@ -361,6 +370,18 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
     // ── /api/tasks/enqueue (dari proses MCP eksternal / bridge forwarding) ────
     app.post('/api/tasks/enqueue', async (req, res) => {
         const { command, target, data } = req.body;
+        
+        // Fast-check: pastikan setidaknya 1 Studio aktif polling
+        if (studioEventQueues.size === 0) {
+            await new Promise(r => setTimeout(r, 2000));
+            if (studioEventQueues.size === 0) {
+                return res.json({
+                    status: 'error',
+                    error: 'Roblox Studio tidak terdeteksi aktif. Pastikan Roblox Studio dibuka, place telah dimuat, dan plugin nvstudio-mcp dalam status terhubung.'
+                });
+            }
+        }
+
         try {
             const result = await addTaskToQueue(command, target, data);
             res.json({ status: 'success', result });
