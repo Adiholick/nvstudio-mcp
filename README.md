@@ -32,8 +32,8 @@ curl -fsSL https://raw.githubusercontent.com/Adiholick/nvstudio-mcp/main/install
 **Apa saja yang dilakukan installer ini secara otomatis?**
 1. 📦 Mengunduh source code, memasang dependensi Node.js, dan mengkompilasi TypeScript (*Bridge Server*).
 2. 🧩 **Memasang Plugin Roblox Studio (`nvstudio_mcp.rbxmx`) otomatis** ke folder sistem Roblox Studio Anda (`%LOCALAPPDATA%\Roblox\Plugins` di Windows atau `~/Documents/ROBLOX/Plugins` di macOS).
-3. 🤖 Mengintegrasikan *AI Agent Skills* anti-halusinasi langsung ke **Antigravity IDE** (`~/.gemini/config/plugins/nvstudio-mcp`).
-4. ⚙️ Melakukan auto-konfigurasi jika mendeteksi editor **Cursor** (`.cursor/mcp.json`).
+3. 🧠 **Universal AI Skill Installer**: Secara cerdas memindai dan mengunduh library skill 29+ *roblox-brain* dan *nvstudio-mcp-guide*, lalu menginjeksinya langsung ke dalam struktur `skills/` dari **AI Agent apapun** yang Anda gunakan (mendukung **Antigravity IDE**, **Cursor**, **Claude Code**, **Codex**, **OpenCode**, dan **Roo Code**).
+4. ⚙️ Melakukan auto-konfigurasi jika mendeteksi editor **Cursor** (`.cursor/mcp.json`) atau **Antigravity** (`mcp_config.json`).
 
 ---
 
@@ -126,8 +126,14 @@ Installer `install.sh` sebelumnya mengkloning repositori dan menginstal Node.js 
 rm -rf ~/.nvstudio-mcp
 ```
 
-### 4. Hapus Konfigurasi dari Editor AI Anda
+### 4. Hapus Konfigurasi dan Skills dari Editor AI Anda
 Jika Anda memasukkan konfigurasi MCP secara otomatis ke Cursor atau secara manual ke Claude Desktop, buka file pengaturan `mcp.json` tersebut dan **hapus blok `"nvstudio-mcp"`** dari dalam objek `mcpServers`.
+
+**Untuk membersihkan skill bawaan (Universal Skill Installer):**
+Anda bisa menghapus manual symlink/folder shortcut (yang bernama awalan `roblox-`) dari dalam folder konfigurasi agen Anda:
+- **Cursor / Workspace Lokal**: Hapus isi `.cursor/skills` dan `.cursor/roblox-brain.md`
+- **Claude Code**: Hapus dari `~/.claude/skills`
+- **Codex / OpenCode**: Hapus dari direktori lokal atau global (`~/.codex/skills`, `~/.opencode/skills`).
 
 ---
 

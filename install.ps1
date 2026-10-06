@@ -66,7 +66,22 @@ if (Test-Path $PluginSourceX) {
     Write-Host "[WARN] File nvstudio_mcp.rbxmx belum dicompile. Harap compile secara manual!" -ForegroundColor Yellow
 }
 
-# 5. Hybrid AI Installer (Antigravity & Cursor)
+# 5. Mengunduh Skill Eksternal Secara Global (Untuk Semua Agent)
+Write-Host "[*] Mengunduh referensi skill eksternal (roblox-brain)..." -ForegroundColor Cyan
+$ExternalDir = Join-Path $InstallDir "external"
+$RobloxBrainDir = Join-Path $ExternalDir "roblox-brain"
+
+if (Test-Path $RobloxBrainDir) {
+    $currentLoc = Get-Location
+    Set-Location $RobloxBrainDir
+    git pull origin main --quiet
+    Set-Location $currentLoc
+} else {
+    if (-not (Test-Path $ExternalDir)) { New-Item -ItemType Directory -Force -Path $ExternalDir | Out-Null }
+    git clone https://github.com/TabooHarmony/roblox-brain.git $RobloxBrainDir --quiet
+}
+
+# 6. Hybrid AI Installer (Antigravity & Cursor)
 Write-Host "[*] Menyiapkan AI Agent Plugin (Hybrid Method)..." -ForegroundColor Cyan
 $AntigravityConfigDir = Join-Path $HOME ".gemini\config"
 $AntigravityGlobalMcpFile = Join-Path $AntigravityConfigDir "mcp_config.json"
@@ -81,6 +96,27 @@ if (Test-Path $AntigravityConfigDir) {
     }
     Copy-Item -Recurse -Force (Join-Path $InstallDir "agent-plugin\*") $AntigravityPluginDir
     
+    $SourceBase = Join-Path $InstallDir "external\roblox-brain\skills"
+    $TargetBase = Join-Path $AntigravityPluginDir "skills"
+    if (-not (Test-Path $TargetBase)) { New-Item -ItemType Directory -Force -Path $TargetBase | Out-Null }
+
+    $Categories = @("core", "design", "gameplay", "tools")
+    foreach ($Category in $Categories) {
+        $CategoryPath = Join-Path $SourceBase $Category
+        if (Test-Path $CategoryPath) {
+            $Skills = Get-ChildItem -Path $CategoryPath -Directory
+            foreach ($Skill in $Skills) {
+                $TargetLink = Join-Path $TargetBase $Skill.Name
+                if (-not (Test-Path $TargetLink)) { cmd /c mklink /J "$TargetLink" "$($Skill.FullName)" | Out-Null }
+            }
+        }
+    }
+    
+    $RulesDir = Join-Path $AntigravityPluginDir "rules"
+    if (-not (Test-Path $RulesDir)) { New-Item -ItemType Directory -Force -Path $RulesDir | Out-Null }
+    Copy-Item -Force (Join-Path $InstallDir "external\roblox-brain\AGENTS.md") (Join-Path $RulesDir "roblox-brain.md")
+    Write-Host "   -> 29 Skill roblox-brain berhasil diintegrasikan ke Antigravity." -ForegroundColor Green
+
     $DistJs = (Join-Path $InstallDir "dist\index.js").Replace("\", "/")
     $McpConfigData = @{
         "mcpServers" = @{
@@ -134,12 +170,66 @@ if (Test-Path $CursorDir) {
         }
         $Config | ConvertTo-Json -Depth 10 | Set-Content $CursorMcp -Encoding UTF8
         Write-Host "[OK] Berhasil menginjeksi konfigurasi ke .cursor/mcp.json" -ForegroundColor Green
+        
+        # Pasang Symlink Skills untuk Cursor
+        $CursorSkillsDir = Join-Path $CursorDir "skills"
+        if (-not (Test-Path $CursorSkillsDir)) { New-Item -ItemType Directory -Force -Path $CursorSkillsDir | Out-Null }
+        $Categories = @("core", "design", "gameplay", "tools")
+        foreach ($Category in $Categories) {
+            $CategoryPath = Join-Path $RobloxBrainDir "skills\$Category"
+            if (Test-Path $CategoryPath) {
+                $Skills = Get-ChildItem -Path $CategoryPath -Directory
+                foreach ($Skill in $Skills) {
+                    $TargetLink = Join-Path $CursorSkillsDir $Skill.Name
+                    if (-not (Test-Path $TargetLink)) { cmd /c mklink /J "$TargetLink" "$($Skill.FullName)" | Out-Null }
+                }
+            }
+        }
+        Copy-Item -Force (Join-Path $RobloxBrainDir "AGENTS.md") (Join-Path $CursorDir "roblox-brain.md")
+        Write-Host "   -> 29 Skill roblox-brain berhasil diintegrasikan ke Cursor." -ForegroundColor Green
     } catch {
-        Write-Host "[WARN] Gagal menginjeksi .cursor/mcp.json: $_" -ForegroundColor Yellow
+        Write-Host "[WARN] Gagal menginjeksi Cursor: $_" -ForegroundColor Yellow
     }
 }
 
-# 6. Selesai
+# 7. Universal Skill Installer (Claude Code, Codex, OpenCode, Roo/Cline)
+Write-Host "[*] Memindai AI Agent lain (Claude, Codex, OpenCode, dll)..." -ForegroundColor Cyan
+$AgentPaths = @(
+    (Join-Path $HOME ".claude"),
+    (Join-Path $HOME ".codex"),
+    (Join-Path $HOME ".opencode"),
+    (Join-Path (Get-Location) ".claude"),
+    (Join-Path (Get-Location) ".codex"),
+    (Join-Path (Get-Location) ".opencode")
+)
+
+foreach ($AgentPath in $AgentPaths) {
+    if (Test-Path $AgentPath) {
+        $AgentName = (Split-Path $AgentPath -Leaf).Replace(".", "")
+        Write-Host "   -> Terdeteksi agent: $AgentName ($AgentPath)" -ForegroundColor Green
+        
+        $AgentSkillsDir = Join-Path $AgentPath "skills"
+        if (-not (Test-Path $AgentSkillsDir)) { New-Item -ItemType Directory -Force -Path $AgentSkillsDir | Out-Null }
+        
+        $Categories = @("core", "design", "gameplay", "tools")
+        foreach ($Category in $Categories) {
+            $CategoryPath = Join-Path $RobloxBrainDir "skills\$Category"
+            if (Test-Path $CategoryPath) {
+                $Skills = Get-ChildItem -Path $CategoryPath -Directory
+                foreach ($Skill in $Skills) {
+                    $TargetLink = Join-Path $AgentSkillsDir $Skill.Name
+                    if (-not (Test-Path $TargetLink)) { cmd /c mklink /J "$TargetLink" "$($Skill.FullName)" | Out-Null }
+                }
+            }
+        }
+        
+        # Penautan AGENTS.md sebagai rule utama agent (menggunakan format nama umum agent)
+        Copy-Item -Force (Join-Path $RobloxBrainDir "AGENTS.md") (Join-Path $AgentPath "roblox-brain.md")
+        Write-Host "   -> [OK] Skill roblox-brain dipasang untuk $AgentName." -ForegroundColor Green
+    }
+}
+
+# 8. Selesai
 Write-Host ""
 Write-Host "[SUCCESS] Instalasi nvstudio-mcp Selesai!" -ForegroundColor Green
 Write-Host "=================================================================" -ForegroundColor Cyan
