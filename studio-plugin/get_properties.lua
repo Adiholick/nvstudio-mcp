@@ -40,9 +40,32 @@ return function(targetInstance, data, ctx, targetPath)
         tryProp(prop)
     end
     
-    -- Attributes & Tags
+    -- Attributes & Tags (sanitasi tipe non-JSON agar tidak throw error di JSONEncode)
     pcall(function()
-        props.Attributes = targetInstance:GetAttributes()
+        local rawAttrs = targetInstance:GetAttributes()
+        local safeAttrs = {}
+        for k, val in pairs(rawAttrs) do
+            if typeof(val) == "Vector3" then
+                safeAttrs[k] = {math.round(val.X*100)/100, math.round(val.Y*100)/100, math.round(val.Z*100)/100}
+            elseif typeof(val) == "Color3" then
+                safeAttrs[k] = {math.round(val.R * 255), math.round(val.G * 255), math.round(val.B * 255)}
+            elseif typeof(val) == "CFrame" then
+                safeAttrs[k] = tostring(val)
+            elseif typeof(val) == "EnumItem" then
+                safeAttrs[k] = val.Name
+            elseif typeof(val) == "UDim2" then
+                safeAttrs[k] = {val.X.Scale, val.X.Offset, val.Y.Scale, val.Y.Offset}
+            elseif typeof(val) == "Instance" then
+                safeAttrs[k] = val:GetFullName()
+            elseif typeof(val) == "DateTime" then
+                safeAttrs[k] = val:ToIsoDate()
+            elseif typeof(val) == "string" or typeof(val) == "number" or typeof(val) == "boolean" then
+                safeAttrs[k] = val
+            else
+                safeAttrs[k] = tostring(val)
+            end
+        end
+        props.Attributes = safeAttrs
     end)
     pcall(function()
         props.Tags = CollectionService:GetTags(targetInstance)

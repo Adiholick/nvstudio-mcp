@@ -596,8 +596,8 @@
                         <div class="stat-card-label">Session Diagnostics</div>
                         <div class="info-list">
                             <div class="info-row">
-                                <span class="info-row-label">Mode Polling</span>
-                                <span class="info-row-value" style="color:var(--accent);">Zero-Delay Long-Polling (&lt;50ms)</span>
+                                <span class="info-row-label">Transport Mode</span>
+                                <span class="info-row-value" id="info-transport" style="color:var(--accent);">Dual-Mode (WebSocket ⚡ + Long-Poll)</span>
                             </div>
                             <div class="info-row">
                                 <span class="info-row-label">Luau Pre-Validation</span>
@@ -807,12 +807,26 @@
         }
         
         const statusEl = document.getElementById('info-studio');
+        const transportEl = document.getElementById('info-transport');
         if (s.studioConnected) {
             statusEl.textContent = 'Connected ✓';
             statusEl.style.color = 'var(--success)';
+            if (s.wsStudios && s.wsStudios > 0) {
+                if (transportEl) {
+                    transportEl.textContent = `WebSocket Duplex ⚡ (${s.wsStudios} Active)`;
+                    transportEl.style.color = 'var(--success)';
+                }
+            } else if (transportEl) {
+                transportEl.textContent = 'Long-Polling (Fallback)';
+                transportEl.style.color = 'var(--accent)';
+            }
         } else {
             statusEl.textContent = 'Disconnected';
             statusEl.style.color = 'var(--text-muted)';
+            if (transportEl) {
+                transportEl.textContent = 'Dual-Mode (WebSocket ⚡ + Long-Poll)';
+                transportEl.style.color = 'var(--accent)';
+            }
         }
     }
 

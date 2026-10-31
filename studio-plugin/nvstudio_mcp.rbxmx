@@ -407,9 +407,32 @@ end
         tryProp(prop)
     end
     
-    -- Attributes & Tags
+    -- Attributes & Tags (sanitasi tipe non-JSON agar tidak throw error di JSONEncode)
     pcall(function()
-        props.Attributes = targetInstance:GetAttributes()
+        local rawAttrs = targetInstance:GetAttributes()
+        local safeAttrs = {}
+        for k, val in pairs(rawAttrs) do
+            if typeof(val) == "Vector3" then
+                safeAttrs[k] = {math.round(val.X*100)/100, math.round(val.Y*100)/100, math.round(val.Z*100)/100}
+            elseif typeof(val) == "Color3" then
+                safeAttrs[k] = {math.round(val.R * 255), math.round(val.G * 255), math.round(val.B * 255)}
+            elseif typeof(val) == "CFrame" then
+                safeAttrs[k] = tostring(val)
+            elseif typeof(val) == "EnumItem" then
+                safeAttrs[k] = val.Name
+            elseif typeof(val) == "UDim2" then
+                safeAttrs[k] = {val.X.Scale, val.X.Offset, val.Y.Scale, val.Y.Offset}
+            elseif typeof(val) == "Instance" then
+                safeAttrs[k] = val:GetFullName()
+            elseif typeof(val) == "DateTime" then
+                safeAttrs[k] = val:ToIsoDate()
+            elseif typeof(val) == "string" or typeof(val) == "number" or typeof(val) == "boolean" then
+                safeAttrs[k] = val
+            else
+                safeAttrs[k] = tostring(val)
+            end
+        end
+        props.Attributes = safeAttrs
     end)
     pcall(function()
         props.Tags = CollectionService:GetTags(targetInstance)
@@ -488,10 +511,10 @@ end
 				<BinaryString name="Tags"></BinaryString>
 				<token name="RunContext">0</token>
 				<ProtectedString name="Source"><![CDATA[-- ══════════════════════════════════════════════════════════════════════
--- NVStudio MCP Plugin v2.1.8
--- Arsitektur: Polling Stream / Local HTTP Bridge (Port 3055)
--- Plugin auto-connect saat dimuat, polling /api/ping lalu /api/stream
--- untuk mendapatkan events (status, request) dari server Node.js.
+-- NVStudio MCP Plugin v2.2.2
+-- Arsitektur: Dual-Mode WebSocket Duplex (Port 3055/ws) + Fallback Long-Polling
+-- Plugin auto-connect saat dimuat via WebSocket native, dengan fallback otomatis
+-- ke HTTP stream jika WebSocket tidak tersedia di environment Roblox Studio ini.
 -- ══════════════════════════════════════════════════════════════════════
 
 local HttpService    = game:GetService("HttpService")
@@ -502,6 +525,8 @@ local BASE_URL       = "http://localhost:3055"
 local STREAM_URL     = BASE_URL .. "/api/stream"      -- SSE long-poll (blocking GET)
 local RESPONSE_URL   = BASE_URL .. "/api/response"
 local PING_URL       = BASE_URL .. "/api/ping"
+local WS_URL         = "ws://localhost:3055/ws"
+local WS_URL_IP      = "ws://127.0.0.1:3055/ws"
 
 -- ID unik per sesi Studio
 local STUDIO_ID      = HttpService:GenerateGUID(false)
@@ -523,17 +548,54 @@ local ctx = {
 	getInstanceFromPath = nil -- akan di-bind di bawah
 }
 local MAX_LOGS           = 50
-local isRunning          = false  -- apakah loop aktif
+local isRunning          = false  -- apakah loop/koneksi aktif
 local isManualDisconnect = false
 local isClickDebounce    = false
 local mcpAgentActive     = false  -- apakah Antigravity sedang konek ke MCP
 local serverReachable    = false  -- apakah server Node.js reachable
+local activeWsWrapper    = nil
+local currentTransport   = "none" -- "websocket" | "longpoll" | "none"
 
--- Reconnect config
+-- Reconnect config untuk Long-Polling
 local RECONNECT_DELAY_INITIAL = 1.5
 local RECONNECT_DELAY_MAX     = 1.5
 local reconnectDelay          = RECONNECT_DELAY_INITIAL
 local currentLoopId           = nil
+
+-- Task deduplication state (Bug G)
+local runningTasks   = {} -- taskId -> true
+local completedTasks = {} -- taskId -> os.clock()
+
+local function shouldProcessTask(taskId)
+	if not taskId or taskId == "" then return false end
+	if runningTasks[taskId] then
+		return false
+	end
+	local completedAt = completedTasks[taskId]
+	if completedAt and (os.clock() - completedAt < 60) then
+		return false
+	end
+	runningTasks[taskId] = true
+	return true
+end
+
+local function markTaskDone(taskId)
+	if not taskId then return end
+	runningTasks[taskId] = nil
+	completedTasks[taskId] = os.clock()
+
+	-- Bersihkan entri kedaluwarsa (>60 detik)
+	local now = os.clock()
+	for id, t in pairs(completedTasks) do
+		if now - t > 60 then
+			completedTasks[id] = nil
+		end
+	end
+end
+
+-- Forward declaration
+local startConnectionManager = nil
+local startLongPollingLoop   = nil
 
 -- ── Skills (ModuleScript) ─────────────────────────────────────────────────────
 local skills = {}
@@ -577,12 +639,17 @@ if uiModule then
 			reconnectDelay = RECONNECT_DELAY_INITIAL
 			ui:setStatus("waiting")
 			ui:addLog("[System] Menghubungkan ulang ke Server MCP...", Color3.fromRGB(255, 220, 100))
-			task.spawn(startConnectionLoop)
+			task.spawn(startConnectionManager)
 		else
 			isManualDisconnect = true
 			isRunning = false
 			serverReachable = false
 			mcpAgentActive = false
+			if activeWsWrapper then
+				activeWsWrapper:Close()
+				activeWsWrapper = nil
+			end
+			currentTransport = "none"
 			ui:setStatus("disconnected")
 			ui:addLog("[System] Koneksi dihentikan oleh pengguna.", Color3.fromRGB(255, 100, 100))
 		end
@@ -689,31 +756,325 @@ local function processTask(taskData)
 	return result
 end
 
--- ── Kirim Respons ke Server ───────────────────────────────────────────────────
-local function sendResponse(taskId, resultData)
+-- ── Helper: Sanitize result sebelum JSONEncode (Bug H) ─────────────────────────
+local function sanitizeForJson(val, depth)
+	depth = depth or 0
+	if depth > 5 then return tostring(val) end
+	local t = typeof(val)
+	if t == "string" or t == "number" or t == "boolean" then
+		return val
+	elseif t == "Instance" then
+		return val:GetFullName()
+	elseif t == "Vector3" then
+		return { X = val.X, Y = val.Y, Z = val.Z }
+	elseif t == "CFrame" then
+		return { Position = { X = val.Position.X, Y = val.Position.Y, Z = val.Position.Z } }
+	elseif t == "Color3" then
+		return { R = val.R, G = val.G, B = val.B }
+	elseif t == "table" then
+		local sanitized = {}
+		for k, v in pairs(val) do
+			sanitized[tostring(k)] = sanitizeForJson(v, depth + 1)
+		end
+		return sanitized
+	else
+		return tostring(val)
+	end
+end
+
+-- ── Kirim Respons ke Server (HTTP Fallback) (Bug H) ───────────────────────────
+local function sendResponse(taskId, resultData, attempt)
 	task.spawn(function()
-		local ok, err = pcall(function()
-			local json = HttpService:JSONEncode(resultData)
-			local success = pcall(function()
-				HttpService:PostAsync(
-					RESPONSE_URL .. "/" .. taskId,
-					json,
-					Enum.HttpContentType.ApplicationJson
-				)
-			end)
-			if not success then
-				HttpService:PostAsync(RESPONSE_URL, json, Enum.HttpContentType.ApplicationJson)
-			end
+		local payload = {
+			id      = taskId,
+			taskId  = taskId,
+			attempt = attempt,
+			status  = resultData.status or "success",
+			result  = sanitizeForJson(resultData.result),
+			error   = resultData.error and tostring(resultData.error) or nil,
+		}
+
+		local encOk, json = pcall(function()
+			return HttpService:JSONEncode(payload)
 		end)
-		if not ok and ui then
-			ui:addLog("[System] Gagal kirim response: " .. tostring(err), Color3.fromRGB(255, 100, 100))
+
+		if not encOk then
+			payload.result = tostring(payload.result)
+			pcall(function() json = HttpService:JSONEncode(payload) end)
+		end
+
+		if not json then
+			json = string.format('{"id":"%s","taskId":"%s","status":"error","error":"Gagal encode payload JSON"}', taskId, taskId)
+		end
+
+		local postOk = pcall(function()
+			HttpService:PostAsync(
+				RESPONSE_URL .. "/" .. taskId,
+				json,
+				Enum.HttpContentType.ApplicationJson
+			)
+		end)
+
+		if not postOk then
+			-- Backoff sejenak sebelum fallback ke endpoint legacy (Bug H)
+			task.wait(0.2)
+			local fallbackOk = pcall(function()
+				HttpService:PostAsync(RESPONSE_URL, json, Enum.HttpContentType.ApplicationJson)
+			end)
+			if not fallbackOk and ui then
+				ui:addLog("[System] Gagal kirim response HTTP ke server: " .. tostring(taskId), Color3.fromRGB(255, 100, 100))
+			end
 		end
 	end)
 end
 
--- ── Proses satu event dari SSE stream ────────────────────────────────────────
+-- ── WebSocket API Abstraction ────────────────────────────────────────────────
+local function detectWebSocketCapability()
+	-- 1. Check HttpService:CreateWebStreamClient (Roblox Studio native API)
+	local hasWebStream = false
+	pcall(function()
+		hasWebStream = (typeof(HttpService.CreateWebStreamClient) == "function")
+			and (Enum.WebStreamClientType and Enum.WebStreamClientType.WebSocket ~= nil)
+	end)
+	if hasWebStream then
+		return "WebStreamClient"
+	end
+
+	-- 2. Check global WebSocket API jika tersedia
+	local wsGlobal = rawget(_G, "WebSocket") or rawget(_G, "websocket")
+	if not wsGlobal then
+		pcall(function() wsGlobal = WebSocket end)
+	end
+	if wsGlobal and typeof(wsGlobal.connect) == "function" then
+		return "WebSocketGlobal"
+	end
+
+	return nil
+end
+
+local function createWsClient(url)
+	local cap = detectWebSocketCapability()
+	if not cap then
+		return nil, "WebSocket API not available"
+	end
+
+	if cap == "WebStreamClient" then
+		local ok, client = pcall(function()
+			return HttpService:CreateWebStreamClient(Enum.WebStreamClientType.WebSocket, {
+				Url = url
+			})
+		end)
+		if not ok or not client then
+			return nil, tostring(client or "CreateWebStreamClient failed")
+		end
+
+		local wrapper = {
+			raw = client,
+			cap = "WebStreamClient",
+			closed = false,
+			connections = {},
+		}
+
+		function wrapper:Send(data)
+			if self.closed then return false, "Closed" end
+			return pcall(function()
+				self.raw:Send(data)
+			end)
+		end
+
+		function wrapper:Close()
+			if self.closed then return end
+			self.closed = true
+			pcall(function() self.raw:Close() end)
+			for _, conn in ipairs(self.connections) do
+				pcall(function() conn:Disconnect() end)
+			end
+			table.clear(self.connections)
+		end
+
+		function wrapper:BindEvents(onMessage, onClose)
+			if self.raw.MessageReceived and typeof(self.raw.MessageReceived.Connect) == "function" then
+				local ok, conn = pcall(function()
+					return self.raw.MessageReceived:Connect(onMessage)
+				end)
+				if ok and conn then table.insert(self.connections, conn) end
+			end
+
+			if self.raw.Closed and typeof(self.raw.Closed.Connect) == "function" then
+				local ok, conn = pcall(function()
+					return self.raw.Closed:Connect(onClose)
+				end)
+				if ok and conn then table.insert(self.connections, conn) end
+			end
+		end
+
+		return wrapper, nil
+
+	elseif cap == "WebSocketGlobal" then
+		local wsGlobal = rawget(_G, "WebSocket") or rawget(_G, "websocket") or WebSocket
+		local ok, client = pcall(function()
+			return wsGlobal.connect(url)
+		end)
+		if not ok or not client then
+			return nil, tostring(client or "WebSocket.connect failed")
+		end
+
+		local wrapper = {
+			raw = client,
+			cap = "WebSocketGlobal",
+			closed = false,
+			connections = {},
+		}
+
+		function wrapper:Send(data)
+			if self.closed then return false, "Closed" end
+			return pcall(function()
+				if typeof(self.raw.Send) == "function" then
+					self.raw:Send(data)
+				elseif typeof(self.raw.send) == "function" then
+					self.raw:send(data)
+				end
+			end)
+		end
+
+		function wrapper:Close()
+			if self.closed then return end
+			self.closed = true
+			pcall(function()
+				if typeof(self.raw.Close) == "function" then
+					self.raw:Close()
+				elseif typeof(self.raw.close) == "function" then
+					self.raw:close()
+				end
+			end)
+			for _, conn in ipairs(self.connections) do
+				pcall(function() conn:Disconnect() end)
+			end
+			table.clear(self.connections)
+		end
+
+		function wrapper:BindEvents(onMessage, onClose)
+			if self.raw.MessageReceived and typeof(self.raw.MessageReceived.Connect) == "function" then
+				local ok, conn = pcall(function() return self.raw.MessageReceived:Connect(onMessage) end)
+				if ok and conn then table.insert(self.connections, conn) end
+			elseif self.raw.OnMessage then
+				if typeof(self.raw.OnMessage) == "RBXScriptSignal" or (typeof(self.raw.OnMessage) == "userdata" and self.raw.OnMessage.Connect) then
+					local ok, conn = pcall(function() return self.raw.OnMessage:Connect(onMessage) end)
+					if ok and conn then table.insert(self.connections, conn) end
+				else
+					pcall(function() self.raw.OnMessage = onMessage end)
+				end
+			end
+
+			if self.raw.Closed and typeof(self.raw.Closed.Connect) == "function" then
+				local ok, conn = pcall(function() return self.raw.Closed:Connect(onClose) end)
+				if ok and conn then table.insert(self.connections, conn) end
+			elseif self.raw.OnClose then
+				if typeof(self.raw.OnClose) == "RBXScriptSignal" or (typeof(self.raw.OnClose) == "userdata" and self.raw.OnClose.Connect) then
+					local ok, conn = pcall(function() return self.raw.OnClose:Connect(onClose) end)
+					if ok and conn then table.insert(self.connections, conn) end
+				else
+					pcall(function() self.raw.OnClose = onClose end)
+				end
+			end
+		end
+
+		return wrapper, nil
+	end
+
+	return nil, "Unsupported"
+end
+
+-- ── WebSocket Message Dispatcher ─────────────────────────────────────────────
+local function handleWsMessage(wrapper, rawMessage)
+	if type(rawMessage) ~= "string" or rawMessage == "" then return end
+	local ok, decoded = pcall(function() return HttpService:JSONDecode(rawMessage) end)
+	if not ok or type(decoded) ~= "table" then return end
+
+	local kind = decoded.kind
+
+	-- Heartbeat ping -> balas pong
+	if kind == "ping" then
+		pcall(function()
+			wrapper:Send(HttpService:JSONEncode({ kind = "pong", ts = os.time() }))
+		end)
+		return
+	end
+
+	if kind == "pong" then
+		return
+	end
+
+	-- Update status koneksi MCP / Studio
+	if kind == "status" then
+		local newActive = decoded.mcpConnected == true
+		local changed = (mcpAgentActive ~= newActive)
+		mcpAgentActive = newActive
+		if ui then
+			if mcpAgentActive then
+				ui:setStatus("connected")
+			else
+				ui:setStatus("server_connected")
+			end
+			if newActive and changed then
+				ui:addLog("[System] ✅ IDE Agent (Antigravity) aktif ⚡", Color3.fromRGB(100, 255, 100))
+			elseif not newActive and changed then
+				ui:addLog("[System] ⚠️ IDE Agent terputus.", Color3.fromRGB(255, 150, 50))
+			end
+		end
+		return
+	end
+
+	-- Eksekusi perintah AI
+	if kind == "request" then
+		local taskId  = decoded.taskId or decoded.requestId
+		local attempt = decoded.attempt
+		local command = decoded.command
+		local target  = decoded.target
+		local data    = decoded.data
+
+		if not taskId or not command then return end
+		if not shouldProcessTask(taskId) then return end -- Bug G: Dedup!
+
+		task.spawn(function()
+			local resultData = processTask({
+				id      = taskId,
+				command = command,
+				target  = target or "",
+				data    = data,
+			})
+			markTaskDone(taskId) -- Bug G: Tandai selesai
+			if resultData then
+				-- Push respons instan kembali via WebSocket (Zero-Delay)
+				local responseEnvelope = {
+					kind    = "response",
+					taskId  = taskId,
+					id      = taskId,
+					attempt = attempt,
+					status  = resultData.status,
+					result  = sanitizeForJson(resultData.result),
+					error   = resultData.error and tostring(resultData.error) or nil,
+				}
+				local encOk, encoded = pcall(function()
+					return HttpService:JSONEncode(responseEnvelope)
+				end)
+				local sent = false
+				if encOk then
+					local sendOk, _ = wrapper:Send(encoded)
+					sent = (sendOk == true)
+				end
+				if not sent then
+					-- Jika serialisasi atau pengiriman via WS gagal, fallback ke HTTP POST
+					sendResponse(taskId, resultData, attempt)
+				end
+			end
+		end)
+		return
+	end
+end
+
+-- ── Proses satu event dari SSE stream (Long-Polling fallback) ────────────────
 local function handleSSELine(line)
-	-- Format SSE: "data: {...json...}"
 	local payload = line
 	if line:sub(1, 6) == "event:" then return end
 	if line:sub(1, 5) == "data:" then
@@ -726,12 +1087,10 @@ local function handleSSELine(line)
 
 	local kind = decoded.kind
 
-	-- heartbeat: server masih hidup
 	if kind == "heartbeat" then
 		return
 	end
 
-	-- status: update mcpConnected
 	if kind == "status" then
 		local newActive = decoded.mcpConnected == true
 		local changed = (mcpAgentActive ~= newActive)
@@ -752,14 +1111,15 @@ local function handleSSELine(line)
 		return
 	end
 
-	-- request: ada task dari AI agent
 	if kind == "request" then
-		local taskId  = decoded.requestId
+		local taskId  = decoded.requestId or decoded.taskId
+		local attempt = decoded.attempt
 		local command = decoded.command
 		local target  = decoded.target
 		local data    = decoded.data
 
 		if not taskId or not command then return end
+		if not shouldProcessTask(taskId) then return end -- Bug G: Dedup!
 
 		task.spawn(function()
 			local resultData = processTask({
@@ -768,39 +1128,34 @@ local function handleSSELine(line)
 				target  = target or "",
 				data    = data,
 			})
+			markTaskDone(taskId) -- Bug G: Tandai selesai
 			if resultData then
-				sendResponse(taskId, resultData)
+				sendResponse(taskId, resultData, attempt)
 			end
 		end)
 		return
 	end
 end
 
--- ── Loop Utama: Ping → Stream → Parse SSE lines ───────────────────────────────
--- Roblox HttpService:GetAsync() tidak mendukung streaming, jadi kita
--- menggunakan strategi: GET /api/stream dengan waktu hold singkat (5 detik).
--- Server mengirim semua events yang tertunda lalu tutup koneksi.
--- Plugin reconnect langsung untuk sesi berikutnya.
-function startConnectionLoop()
-	if isRunning then return end
-	isRunning = true
-	isManualDisconnect = false
+-- ── Fallback Loop: Long-Polling (/api/stream) ─────────────────────────────────
+function startLongPollingLoop()
+	if not isRunning or isManualDisconnect then return end
+	currentTransport = "longpoll"
 	reconnectDelay = RECONNECT_DELAY_INITIAL
 
 	local loopId = HttpService:GenerateGUID(false)
 	currentLoopId = loopId
 
 	if ui then
-		ui:addLog("[System] NVStudio MCP v2.1.8 — Menghubungkan ke server...", Color3.fromRGB(200, 200, 200))
+		ui:addLog("[System] Mode Long-Polling aktif (Port 3055)...", Color3.fromRGB(200, 200, 200))
 	end
 
 	local consecutiveErrors = 0
 
-	while isRunning and not isManualDisconnect and currentLoopId == loopId do
-		-- Stream / polling snapshot dari server
+	while isRunning and not isManualDisconnect and currentLoopId == loopId and currentTransport == "longpoll" do
 		local streamOk, streamRaw = pcall(function()
 			return HttpService:GetAsync(
-				STREAM_URL .. "?studioId=" .. HttpService:UrlEncode(STUDIO_ID),
+				STREAM_URL .. "?studioId=" .. HttpService:UrlEncode(STUDIO_ID) .. "&placeId=" .. tostring(game.PlaceId),
 				false
 			)
 		end)
@@ -813,28 +1168,26 @@ function startConnectionLoop()
 				serverReachable = true
 				if ui then
 					ui:setStatus(mcpAgentActive and "connected" or "server_connected")
-					ui:addLog("[System] ✅ Server MCP terhubung & siap.", Color3.fromRGB(100, 255, 150))
+					ui:addLog("[System] ✅ Server MCP terhubung via Long-Polling.", Color3.fromRGB(100, 255, 150))
 				end
 			end
 
-			-- Parse baris-baris SSE
 			for line in (streamRaw .. "\n"):gmatch("([^\n]*)\n") do
 				line = line:gsub("\r", "")
 				if line ~= "" then
 					handleSSELine(line)
 				end
 			end
-			task.wait(0.05) -- Instant loop: server menahan request (hanging GET) saat idle
+			task.wait()
 		else
 			consecutiveErrors = consecutiveErrors + 1
-			-- Toleransi 2x gagal sebelum menandai server unreachable
 			if consecutiveErrors >= 2 then
 				if serverReachable then
 					serverReachable = false
 					mcpAgentActive = false
 					if ui then
 						ui:setStatus("waiting")
-						ui:addLog("[System] ⚠️ Server MCP tidak dapat dijangkau. Mencoba menghubungkan ulang...", Color3.fromRGB(255, 150, 50))
+						ui:addLog("[System] ⚠️ Server MCP tidak dapat dijangkau. Menghubungkan ulang...", Color3.fromRGB(255, 150, 50))
 					end
 				end
 			end
@@ -844,24 +1197,125 @@ function startConnectionLoop()
 		end
 	end
 
-	isRunning = false
-	serverReachable = false
-	mcpAgentActive  = false
-	if ui then ui:setStatus("disconnected") end
+	if currentTransport == "longpoll" and (not isRunning or isManualDisconnect) then
+		isRunning = false
+		serverReachable = false
+		mcpAgentActive  = false
+		if ui then ui:setStatus("disconnected") end
+	end
+end
+
+-- ── Connection Manager: WebSocket Utama + Fallback Long-Polling ──────────────
+function startConnectionManager()
+	if isRunning then return end
+	isRunning = true
+	isManualDisconnect = false
+
+	local cap = detectWebSocketCapability()
+	if cap then
+		task.spawn(function()
+			local wsFailures = 0
+			local backoff = 0.5
+
+			while isRunning and not isManualDisconnect and wsFailures < 3 do
+				currentTransport = "websocket"
+				if ui then
+					ui:setStatus("waiting")
+					ui:addLog("[System] Menghubungkan via WebSocket (Port 3055)...", Color3.fromRGB(200, 200, 255))
+				end
+
+				local wrapper, err = createWsClient(WS_URL)
+				if not wrapper then
+					-- Coba fallback ke IP 127.0.0.1
+					wrapper, err = createWsClient(WS_URL_IP)
+				end
+
+				if wrapper then
+					activeWsWrapper = wrapper
+					serverReachable = true
+					if ui then
+						ui:setStatus(mcpAgentActive and "connected" or "server_connected")
+						ui:addLog("[System] ⚡ WebSocket Terhubung! (Ultra Low-Latency <1ms)", Color3.fromRGB(100, 255, 150))
+					end
+
+					-- Kirim pesan registrasi awal
+					local regOk = wrapper:Send(HttpService:JSONEncode({
+						kind = "register",
+						studioId = STUDIO_ID,
+						placeId = game.PlaceId,
+						pluginsVersion = 2,
+					}))
+
+					if regOk then
+						wsFailures = 0
+						backoff = 0.5
+
+						local closedSignal = Instance.new("BindableEvent")
+						wrapper:BindEvents(
+							function(msg)
+								handleWsMessage(wrapper, msg)
+							end,
+							function()
+								closedSignal:Fire()
+							end
+						)
+
+						closedSignal.Event:Wait()
+						closedSignal:Destroy()
+					end
+
+					if activeWsWrapper == wrapper then
+						activeWsWrapper = nil
+					end
+					wrapper:Close()
+				end
+
+				if isManualDisconnect or not isRunning then break end
+
+				wsFailures = wsFailures + 1
+				if wsFailures < 3 then
+					if ui then
+						ui:setStatus("waiting")
+						ui:addLog("[System] ⚠️ WebSocket terputus. Reconnect dalam " .. string.format("%.1f", backoff) .. "s...", Color3.fromRGB(255, 180, 50))
+					end
+					task.wait(backoff)
+					backoff = math.min(backoff * 2, 5.0)
+				end
+			end
+
+			-- Jika WS gagal 3x berturut-turut dan plugin masih aktif -> Beralih ke Long-Polling!
+			if isRunning and not isManualDisconnect then
+				if ui then
+					ui:addLog("[System] ℹ️ Mengalihkan ke Mode Fallback Long-Polling...", Color3.fromRGB(255, 200, 100))
+				end
+				startLongPollingLoop()
+			end
+		end)
+	else
+		-- WebSocket tidak didukung di environment Studio ini -> langsung Long-Polling
+		if ui then
+			ui:addLog("[System] ℹ️ WebSocket tidak terdeteksi. Menggunakan Long-Polling.", Color3.fromRGB(200, 200, 200))
+		end
+		startLongPollingLoop()
+	end
 end
 
 -- ── Plugin Unloading ──────────────────────────────────────────────────────────
 plugin.Unloading:Connect(function()
 	isManualDisconnect = true
 	isRunning = false
+	if activeWsWrapper then
+		activeWsWrapper:Close()
+		activeWsWrapper = nil
+	end
 end)
 
 -- ══════════════════════════════════════════════════════════════════════
--- STARTUP: Langsung mulai connection loop
+-- STARTUP: Langsung mulai connection manager
 -- ══════════════════════════════════════════════════════════════════════
 task.spawn(function()
 	task.wait(0.5) -- Tunggu UI siap
-	startConnectionLoop()
+	startConnectionManager()
 end)
 ]]></ProtectedString>
 			</Properties>

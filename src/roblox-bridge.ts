@@ -4,7 +4,18 @@ import { Server as HttpServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { exec, execSync } from 'child_process';
-import { taskQueue, resolvePendingTask, taskEmitter, addTaskToQueue, Task } from './task-queue';
+import { taskQueue, resolvePendingTask, taskEmitter, addTaskToQueue, Task, rejectAllPendingTasks, hasPendingTasks, claimTask } from './task-queue';
+import {
+    attachWsGateway,
+    hasActiveWsPeer,
+    getWsPeerCount,
+    getWsStudioIds,
+    sendTaskViaWs,
+    broadcastWsEvent,
+    selectWsPeer,
+    cancelTaskDeadline,
+    getWsPeersDetails,
+} from './ws-gateway';
 
 const { version: SERVER_VERSION } = require('../package.json');
 
@@ -48,6 +59,7 @@ interface SsePeer {
 // Per-studio pending events queue: events yang belum diambil oleh Studio
 const studioEventQueues = new Map<string, Array<Record<string, unknown>>>();
 const studioLastSeen = new Map<string, number>();
+const studioPlaces = new Map<string, number>();
 
 interface StudioPoller {
     res: express.Response;
@@ -55,13 +67,42 @@ interface StudioPoller {
 }
 const activeStudioPollers = new Map<string, StudioPoller>();
 
+// Antrean global untuk task request yang menunggu poller long-polling (/api/stream)
+const pendingStreamTasks: Array<Record<string, unknown>> = [];
+
+export function removePendingStreamTask(taskId: string): void {
+    const idx = pendingStreamTasks.findIndex(t => (t as any).requestId === taskId || (t as any).taskId === taskId);
+    if (idx !== -1) {
+        pendingStreamTasks.splice(idx, 1);
+    }
+}
+
+let disconnectCheckTimer: NodeJS.Timeout | null = null;
+export function checkPendingTasksOnStudioDisconnect(): void {
+    if (disconnectCheckTimer) clearTimeout(disconnectCheckTimer);
+    disconnectCheckTimer = setTimeout(() => {
+        disconnectCheckTimer = null;
+        if (!isStudioConnected() && hasPendingTasks()) {
+            pendingStreamTasks.length = 0;
+            rejectAllPendingTasks('Roblox Studio terputus sebelum merespons tugas.');
+        }
+    }, 2000);
+}
+
 setInterval(() => {
     const now = Date.now();
     let changed = false;
     for (const [sid, lastSeen] of studioLastSeen.entries()) {
-        if (now - lastSeen > 35000) {
+        const isPollerActive = activeStudioPollers.has(sid);
+        if (!isPollerActive && now - lastSeen > 10000) {
             studioEventQueues.delete(sid);
             studioLastSeen.delete(sid);
+            studioPlaces.delete(sid);
+            changed = true;
+        } else if (now - lastSeen > 25000) {
+            studioEventQueues.delete(sid);
+            studioLastSeen.delete(sid);
+            studioPlaces.delete(sid);
             const poller = activeStudioPollers.get(sid);
             if (poller) {
                 clearTimeout(poller.timer);
@@ -73,11 +114,88 @@ setInterval(() => {
     }
     if (changed) {
         broadcastStatus();
+        if (!isStudioConnected() && hasPendingTasks()) {
+            checkPendingTasksOnStudioDisconnect();
+        }
     }
-}, 5000);
+}, 2000);
 
-export function isStudioConnected(): boolean {
-    return studioEventQueues.size > 0 || activeStudioPollers.size > 0;
+export function isStudioConnected(filter?: { placeId?: number; studioId?: string }): boolean {
+    if (filter?.studioId) {
+        if (hasActiveWsPeer({ studioId: filter.studioId })) return true;
+        if (activeStudioPollers.has(filter.studioId)) return true;
+        const seen = studioLastSeen.get(filter.studioId);
+        if (seen && Date.now() - seen <= 5000) return true;
+        return false;
+    }
+    if (filter?.placeId !== undefined && filter?.placeId !== null) {
+        if (hasActiveWsPeer({ placeId: filter.placeId })) return true;
+        for (const [sid, pid] of studioPlaces.entries()) {
+            if (pid === filter.placeId) {
+                if (activeStudioPollers.has(sid)) return true;
+                const seen = studioLastSeen.get(sid);
+                if (seen && Date.now() - seen <= 5000) return true;
+            }
+        }
+        return false;
+    }
+    if (hasActiveWsPeer()) return true;
+    if (activeStudioPollers.size > 0) return true;
+    const now = Date.now();
+    for (const lastSeen of studioLastSeen.values()) {
+        if (now - lastSeen <= 3000) return true;
+    }
+    return false;
+}
+
+export interface ConnectedStudioSummary {
+    studioId: string;
+    placeId?: number;
+    transport: 'websocket' | 'long-polling';
+    lastSeen: number;
+    isAlive: boolean;
+    isBusy: boolean;
+}
+
+export function getConnectedStudios(): ConnectedStudioSummary[] {
+    const list: ConnectedStudioSummary[] = [];
+    const wsDetails = getWsPeersDetails();
+    const wsStudioIds = new Set<string>();
+
+    for (const p of wsDetails) {
+        wsStudioIds.add(p.studioId);
+        list.push({
+            studioId: p.studioId,
+            placeId: p.placeId,
+            transport: 'websocket',
+            lastSeen: p.lastSeen,
+            isAlive: p.isAlive && !p.unresponsive,
+            isBusy: p.isBusy,
+        });
+    }
+
+    const now = Date.now();
+    for (const [sid, lastSeen] of studioLastSeen.entries()) {
+        if (!wsStudioIds.has(sid) && (activeStudioPollers.has(sid) || now - lastSeen <= 5000)) {
+            list.push({
+                studioId: sid,
+                placeId: studioPlaces.get(sid),
+                transport: 'long-polling',
+                lastSeen,
+                isAlive: true,
+                isBusy: false,
+            });
+        }
+    }
+
+    return list;
+}
+
+export function getConnectedStudioCount(): number {
+    const ids = new Set<string>();
+    for (const sid of studioEventQueues.keys()) ids.add(sid);
+    for (const sid of getWsStudioIds()) ids.add(sid);
+    return Math.max(ids.size, isStudioConnected() ? 1 : 0);
 }
 
 function flushEventsToStudio(sid: string): boolean {
@@ -91,9 +209,10 @@ function flushEventsToStudio(sid: string): boolean {
     clearTimeout(poller.timer);
     activeStudioPollers.delete(sid);
 
+    const nonStatusEvents = queue.filter(ev => ev.kind !== 'status');
     const events: Array<Record<string, unknown>> = [
         { kind: 'status', mcpConnected, studioCount: Math.max(studioEventQueues.size, 1), serverVersion: SERVER_VERSION },
-        ...queue
+        ...nonStatusEvents
     ];
 
     try {
@@ -116,7 +235,7 @@ function enqueueForStudio(studioId: string | null, event: Record<string, unknown
         if (q.length > 100) q.shift();
         flushEventsToStudio(studioId);
     } else {
-        // Broadcast ke semua studio yang terdaftar
+        // Broadcast non-task (status, heartbeat) ke semua studio yang terdaftar
         for (const [sid, q] of studioEventQueues.entries()) {
             q.push(event);
             if (q.length > 100) q.shift();
@@ -161,27 +280,96 @@ function sendEvent(peer: SsePeer, kind: string, payload: Record<string, unknown>
  * Push status koneksi ke semua peer (apakah mcpConnected, jumlah peer aktif dll).
  */
 function broadcastStatus() {
+    const studioCount = getConnectedStudioCount();
     const statusEvent = {
         mcpConnected,
-        studioCount: studioEventQueues.size,
+        studioCount,
         serverVersion: SERVER_VERSION,
     };
     broadcastEvent('status', statusEvent);
+    broadcastWsEvent('status', statusEvent);
 }
 
 /**
- * Push task ke semua Studio peer (broadcast ke semua Studio yang terbuka).
- * Hanya satu yang akan memprosesnya (first-come first-served via requestId).
+ * Push task ke Studio peer (dengan routing studioId/placeId).
+ * Mengembalikan true jika berhasil dikirim langsung ke poller aktif, false jika diantrekan (Bug F).
  */
-function broadcastTask(task: Task) {
+function broadcastTask(task: Task): boolean {
+    const totalBudget = task.remainingMs ?? 30000;
+    const elapsed = task.createdAt ? (Date.now() - task.createdAt) : 0;
+    const remainingMs = Math.max(1000, totalBudget - elapsed);
+
+    // Bug A & E: Stamp attempt counter dan channel pengiriman
+    const attempt = (task.attempt || 0) + 1;
+    task.attempt = attempt;
+    task.dispatchedAt = Date.now();
+    task.deliveredVia = 'stream';
+
     const taskEvent = {
+        kind: 'request',
         requestId: task.id,
+        taskId: task.id,
+        attempt,
         command: task.command,
         target: task.target,
         data: task.data ?? null,
-        remainingMs: 29000,
+        studioId: task.studioId,
+        placeId: task.placeId,
+        remainingMs,
     };
-    enqueueForStudio(null, { kind: 'request', ...taskEvent });
+
+    // 1. Coba kirim langsung ke poller aktif yang cocok (hanging GET)
+    let matchingSid: string | null | undefined = null;
+    if (task.studioId && activeStudioPollers.has(task.studioId)) {
+        matchingSid = task.studioId;
+    } else if (task.placeId !== undefined && task.placeId !== null) {
+        for (const sid of activeStudioPollers.keys()) {
+            if (studioPlaces.get(sid) === task.placeId) {
+                matchingSid = sid;
+                break;
+            }
+        }
+    } else if (!task.studioId && task.placeId === undefined && activeStudioPollers.size > 0) {
+        let bestSid: string | null = null;
+        let latestTime = -1;
+        for (const sid of activeStudioPollers.keys()) {
+            const seen = studioLastSeen.get(sid) ?? 0;
+            if (seen > latestTime) {
+                latestTime = seen;
+                bestSid = sid;
+            }
+        }
+        matchingSid = bestSid || activeStudioPollers.keys().next().value;
+    }
+
+    if (matchingSid && activeStudioPollers.has(matchingSid)) {
+        const poller = activeStudioPollers.get(matchingSid)!;
+        clearTimeout(poller.timer);
+        activeStudioPollers.delete(matchingSid);
+        studioLastSeen.set(matchingSid, Date.now());
+
+        const events: Array<Record<string, unknown>> = [
+            { kind: 'status', mcpConnected, studioCount: Math.max(studioEventQueues.size, 1), serverVersion: SERVER_VERSION },
+            taskEvent
+        ];
+
+        try {
+            poller.res.setHeader('Content-Type', 'text/plain');
+            poller.res.setHeader('Cache-Control', 'no-cache, no-store');
+            const body = events.map(ev => `data: ${JSON.stringify(ev)}`).join('\n');
+            poller.res.send(body);
+            return true;
+        } catch {
+            // Jika pengiriman langsung gagal, masukkan ke antrean pending
+        }
+    }
+
+    // 2. Jika tidak ada poller yang sedang hanging (jeda antar-request), masukkan ke antrean
+    pendingStreamTasks.push(taskEvent);
+    if (pendingStreamTasks.length > 50) {
+        pendingStreamTasks.shift();
+    }
+    return false;
 }
 
 // ── Logging ───────────────────────────────────────────────────────────────────
@@ -195,8 +383,10 @@ function addLog(io: Server, type: ActivityLog['type'], message: string) {
     };
     activityLogs.unshift(log);
     if (activityLogs.length > 200) activityLogs.pop();
-    io.emit('log', log);
-    io.emit('stats', { totalTasks, successCount, errorCount, sessionStart });
+    if (io.engine && io.engine.clientsCount > 0) {
+        io.emit('log', log);
+        io.emit('stats', { totalTasks, successCount, errorCount, sessionStart });
+    }
 }
 
 /**
@@ -244,6 +434,56 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
     const httpServer = createServer(app);
     const io = new Server(httpServer, { cors: { origin: '*' } });
 
+    function handleTaskResponse(taskId: string, status: 'success' | 'error', result?: any, error?: string) {
+        if (status === 'success') {
+            successCount++;
+            addLog(io, 'response', `Perintah selesai: ${String(result ?? '').substring(0, 120)}`);
+        } else {
+            errorCount++;
+            addLog(io, 'error', `Gagal: ${error}`);
+        }
+        removePendingStreamTask(taskId);
+        cancelTaskDeadline(taskId);
+        resolvePendingTask(taskId, status, result, error);
+    }
+
+    // Pasang WebSocket Gateway untuk duplex communication instan (/ws)
+    attachWsGateway(httpServer, {
+        onTaskResponse: (taskId, status, result, error) => {
+            handleTaskResponse(taskId, status, result, error);
+        },
+        onLog: (type, message) => {
+            addLog(io, type, message);
+        },
+        onStudioStatusChange: () => {
+            const connected = isStudioConnected();
+            const studioCount = getConnectedStudioCount();
+            io.emit('studio-status', { connected, studioCount });
+            broadcastStatus();
+            if (!connected && hasPendingTasks()) {
+                checkPendingTasksOnStudioDisconnect();
+            }
+        },
+        getServerVersion: () => SERVER_VERSION,
+        isMcpConnected: () => mcpConnected,
+        onRedispatchTask: (task, failedStudioId) => {
+            // Coba re-dispatch ke peer WS lain jika ada yang cocok
+            const nextPeer = selectWsPeer({
+                placeId: task.placeId,
+            });
+            if (nextPeer && nextPeer.studioId !== failedStudioId) {
+                const ok = sendTaskViaWs(task, nextPeer.studioId);
+                if (ok) return true;
+            }
+            // Fallback: hanya ke long-polling jika ada poller yang sedang hanging aktif (Bug F)
+            if (activeStudioPollers.size > 0) {
+                const delivered = broadcastTask(task);
+                if (delivered) return true;
+            }
+            return false;
+        },
+    });
+
     app.use(express.json({ limit: '50mb' }));
     app.use(express.static(path.join(__dirname, '../public')));
 
@@ -253,32 +493,48 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
     io.on('connection', (socket) => {
         socket.emit('init', {
             logs: activityLogs,
-            stats: { totalTasks, successCount, errorCount, sessionStart, studioConnected: studioEventQueues.size > 0, port },
+            stats: { 
+                totalTasks, 
+                successCount, 
+                errorCount, 
+                sessionStart, 
+                studioConnected: isStudioConnected(), 
+                studioCount: getConnectedStudioCount(),
+                wsStudios: getWsPeerCount(),
+                port 
+            },
         });
     });
 
     // ── /api/stats ─────────────────────────────────────────────────────────────
     app.get('/api/stats', (req, res) => {
-        const activeStudios = studioEventQueues.size;
+        const activeStudios = getConnectedStudioCount();
+        const wsStudios = getWsPeerCount();
         res.json({
             totalTasks, successCount, errorCount, sessionStart,
-            studioConnected: activeStudios > 0,
+            studioConnected: isStudioConnected(),
             studioCount: activeStudios,
+            wsConnectedCount: wsStudios,
+            transport: wsStudios > 0 ? 'websocket' : (activeStudioPollers.size > 0 ? 'long-polling' : 'none'),
             mcpConnected,
             port,
+            connectedStudios: getConnectedStudios(),
         });
     });
 
     // ── /api/ping ─────────────────────────────────────────────────────────────
     app.get('/api/ping', (req, res) => {
         const uptime = Math.floor((Date.now() - new Date(sessionStart).getTime()) / 1000);
-        const activeStudios = studioEventQueues.size;
+        const activeStudios = getConnectedStudioCount();
+        const wsStudios = getWsPeerCount();
         res.json({ 
             status: 'ok', 
             version: SERVER_VERSION,
             uptimeSeconds: uptime,
             totalTasksProcessed: totalTasks,
-            activeStudios: activeStudios
+            activeStudios: activeStudios,
+            wsStudios: wsStudios,
+            dualMode: true,
         });
     });
 
@@ -289,13 +545,18 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
     // atau timeout 15 detik (heartbeat) untuk menjaga koneksi tetap segar.
     app.get('/api/stream', (req, res) => {
         const studioId = (req.query.studioId as string) || `anon-${Date.now()}`;
+        const placeIdStr = req.query.placeId as string | undefined;
+        const placeId = placeIdStr !== undefined && placeIdStr !== '' ? parseInt(placeIdStr, 10) : undefined;
+        if (placeId !== undefined && !isNaN(placeId)) {
+            studioPlaces.set(studioId, placeId);
+        }
         studioLastSeen.set(studioId, Date.now());
 
         // Daftarkan studio jika belum ada
         if (!studioEventQueues.has(studioId)) {
             studioEventQueues.set(studioId, []);
             io.emit('studio-status', { connected: true, studioCount: Math.max(studioEventQueues.size, 1), studioId });
-            addLog(io, 'system', `Studio terdaftar. (ID: ${studioId.substring(0, 8)}…, Total: ${studioEventQueues.size})`);
+            addLog(io, 'system', `Studio terdaftar. (ID: ${studioId.substring(0, 8)}…, Place: ${placeId ?? 'Local'}, Total: ${studioEventQueues.size})`);
 
             if (!isDaemon && !dashboardOpened) {
                 dashboardOpened = true;
@@ -315,29 +576,46 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
             activeStudioPollers.delete(studioId);
         }
 
-        // Kumpulkan semua events yang belum dikirim ke studio ini
-        const queue = studioEventQueues.get(studioId) ?? [];
-        if (queue.length > 0) {
-            studioEventQueues.set(studioId, []); // kosongkan antrian
+        // 1. Prioritas Utama: Cek apakah ada task AI yang cocok sedang menunggu poller Studio ini (Bug #3 Routing)
+        const matchIdx = pendingStreamTasks.findIndex((t: any) => {
+            if (t.studioId && t.studioId !== studioId) return false;
+            if (t.placeId !== undefined && t.placeId !== null && placeId !== undefined && t.placeId !== placeId) return false;
+            return true;
+        });
+
+        if (matchIdx !== -1) {
+            const taskEvent = pendingStreamTasks.splice(matchIdx, 1)[0];
             const events: Array<Record<string, unknown>> = [
-                { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: SERVER_VERSION },
+                { kind: 'status', mcpConnected, studioCount: Math.max(studioEventQueues.size, 1), serverVersion: SERVER_VERSION },
+                taskEvent
             ];
-            for (const ev of queue) {
-                if (ev.kind !== 'status') events.push(ev);
-            }
             res.setHeader('Content-Type', 'text/plain');
             res.setHeader('Cache-Control', 'no-cache, no-store');
             const body = events.map(ev => `data: ${JSON.stringify(ev)}`).join('\n');
             return res.send(body);
         }
 
-        // Jika antrean kosong, TAHAN koneksi (Long-Polling) maksimal 15 detik
+        // 2. Kumpulkan semua events non-task yang belum dikirim ke studio ini
+        const queue = studioEventQueues.get(studioId) ?? [];
+        if (queue.length > 0) {
+            studioEventQueues.set(studioId, []); // kosongkan antrian
+            const events: Array<Record<string, unknown>> = [
+                { kind: 'status', mcpConnected, studioCount: Math.max(studioEventQueues.size, 1), serverVersion: SERVER_VERSION },
+                ...queue.filter(ev => ev.kind !== 'status')
+            ];
+            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader('Cache-Control', 'no-cache, no-store');
+            const body = events.map(ev => `data: ${JSON.stringify(ev)}`).join('\n');
+            return res.send(body);
+        }
+
+        // 3. Jika antrean kosong, TAHAN koneksi (Long-Polling) maksimal 15 detik
         const timer = setTimeout(() => {
             activeStudioPollers.delete(studioId);
             try {
                 const events = [
                     { kind: 'heartbeat', timestamp: Date.now() },
-                    { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: SERVER_VERSION }
+                    { kind: 'status', mcpConnected, studioCount: Math.max(studioEventQueues.size, 1), serverVersion: SERVER_VERSION }
                 ];
                 res.setHeader('Content-Type', 'text/plain');
                 res.setHeader('Cache-Control', 'no-cache, no-store');
@@ -348,11 +626,20 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
 
         activeStudioPollers.set(studioId, { res, timer });
 
-        req.on('close', () => {
+        res.on('close', () => {
             const current = activeStudioPollers.get(studioId);
             if (current && current.res === res) {
                 clearTimeout(current.timer);
                 activeStudioPollers.delete(studioId);
+            }
+            if (!res.writableEnded) {
+                // Client menutup koneksi HTTP sebelum respons dikirim (Studio ditutup/crash)
+                studioLastSeen.delete(studioId);
+                studioEventQueues.delete(studioId);
+                broadcastStatus();
+                if (hasPendingTasks()) {
+                    checkPendingTasksOnStudioDisconnect();
+                }
             }
         });
     });
@@ -394,84 +681,84 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
             try { res.end(); } catch { /* ignore */ }
         }
 
-        req.on('close', cleanup);
-        req.on('error', cleanup);
+        res.on('close', cleanup);
+        res.on('error', cleanup);
     });
 
-    // ── /api/response/:taskId (Studio POSTs hasil eksekusi) ───────────────────
+    // ── /api/response/:taskId (Studio POSTs hasil eksekusi) (Bug H) ─────────
     app.post('/api/response/:taskId', (req, res) => {
-        const { taskId } = req.params;
+        const taskId = req.params.taskId || req.body?.taskId || req.body?.id;
         const { status, result, error } = req.body;
-
-        if (status === 'success') {
-            successCount++;
-            addLog(io, 'response', `Perintah selesai: ${String(result ?? '').substring(0, 120)}`);
-        } else {
-            errorCount++;
-            addLog(io, 'error', `Gagal: ${error}`);
-        }
-
-        resolvePendingTask(taskId, status, result, error);
+        handleTaskResponse(taskId, status, result, error);
         res.json({ ok: true });
     });
 
-    // ── /api/response (legacy — lama, tetap didukung) ────────────────────────
+    // ── /api/response (legacy & fallback) (Bug H) ───────────────────────────
     app.post('/api/response', (req, res) => {
-        const { id, status, result, error } = req.body;
-        if (status === 'success') {
-            successCount++;
-            addLog(io, 'response', `Perintah selesai: ${String(result ?? '').substring(0, 120)}`);
-        } else {
-            errorCount++;
-            addLog(io, 'error', `Gagal: ${error}`);
-        }
-        resolvePendingTask(id, status, result, error);
+        const taskId = req.body?.taskId || req.body?.id || (req.query?.taskId as string);
+        const { status, result, error } = req.body;
+        handleTaskResponse(taskId, status, result, error);
         res.json({ ok: true });
     });
 
-    // ── Notifikasi task baru ke Dashboard ────────────────────────────────────
-    // Pengiriman task ke Studio dilakukan via /api/stream (snapshot polling).
-    // Di sini kita hanya log ke dashboard browser.
+    // ── Notifikasi task baru ke Dashboard & Dispatch ke Studio ────────────────
     taskEmitter.on('new_task', (task: Task) => {
         totalTasks++;
         addLog(io, 'task', `Task dikirim ke Studio: '${task.command}'${task.target ? ` → ${task.target}` : ''}`);
+
+        // Prioritas 1: Push via WebSocket instan duplex jika Studio aktif terhubung via WS
+        const sentWs = sendTaskViaWs(task);
+        if (sentWs) {
+            task.deliveredVia = 'ws';
+            return; // Berhasil terkirim instan via WebSocket! Tidak perlu enqueue ke long-polling.
+        }
+
+        // Prioritas 2 (Fallback): Enqueue ke Long-Polling /api/stream
         broadcastTask(task);
     });
 
     // ── /api/tasks/enqueue (dari proses MCP eksternal / bridge forwarding) ────
     app.post('/api/tasks/enqueue', async (req, res) => {
-        const { command, target, data } = req.body;
+        const { command, target, data, placeId, studioId, remainingMs } = req.body;
         
-        // Fast-check: pastikan setidaknya 1 Studio aktif polling
-        if (!isStudioConnected()) {
-            for (let i = 0; i < 6; i++) {
+        // Fast-check: pastikan Studio yang cocok aktif polling / websocket (Bug #3)
+        if (!isStudioConnected({ placeId, studioId })) {
+            for (let i = 0; i < 10; i++) {
                 await new Promise(r => setTimeout(r, 50));
-                if (isStudioConnected()) break;
+                if (isStudioConnected({ placeId, studioId })) break;
             }
-            if (!isStudioConnected()) {
+            if (!isStudioConnected({ placeId, studioId })) {
                 return res.json({
                     status: 'error',
-                    error: 'Roblox Studio tidak terdeteksi aktif. Pastikan Roblox Studio dibuka, place telah dimuat, dan plugin nvstudio-mcp dalam status terhubung.'
+                    error: placeId !== undefined
+                        ? `Roblox Studio dengan Place ID ${placeId} tidak terdeteksi aktif.`
+                        : 'Roblox Studio tidak terdeteksi aktif. Pastikan Roblox Studio dibuka, place telah dimuat, dan plugin nvstudio-mcp dalam status terhubung.'
                 });
             }
         }
 
         try {
-            const result = await addTaskToQueue(command, target, data);
+            const result = await addTaskToQueue(command, target, data, { placeId, studioId, remainingMs });
             res.json({ status: 'success', result });
         } catch (err: any) {
-            res.json({ status: 'error', error: err.message });
+            res.json({ status: 'error', error: err?.message || String(err) });
         }
     });
 
     // ── /api/tasks (legacy long-poll — dipertahankan untuk backward-compat) ───
     // Studio lama yang belum update plugin masih bisa bekerja via polling.
+    // Menggunakan claimTask secara atomik untuk mencegah perebutan task (Bug D & E).
     const waitingPollers: express.Response[] = [];
     taskEmitter.on('new_task', (task: Task) => {
+        if (task.deliveredVia) return; // Abaikan jika task sudah terkirim via WS atau Stream
         if (waitingPollers.length > 0) {
+            const claimed = claimTask(task.id, 'legacy');
+            if (!claimed) return;
             const pollRes = waitingPollers.shift();
             const index = taskQueue.findIndex(t => t.id === task.id);
             if (index !== -1) taskQueue.splice(index, 1);
+            
+            removePendingStreamTask(task.id);
             
             for (const queue of studioEventQueues.values()) {
                 const qIndex = queue.findIndex((e: any) => e.requestId === task.id);
@@ -479,19 +766,25 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
             }
             
             addLog(io, 'task', `[Legacy] Mengirim perintah '${task.command}' ke Studio.`);
-            pollRes?.json(task);
+            pollRes?.json(claimed);
         }
     });
 
     app.get('/api/tasks', (req, res) => {
-        if (taskQueue.length > 0) {
-            const task = taskQueue.shift();
-            addLog(io, 'task', `[Legacy] Mengirim perintah tertunda '${task?.command}' ke Studio.`);
-            res.json(task);
-            return;
+        // Cari task pertama yang belum diklaim oleh transport mana pun
+        const unclaimedIdx = taskQueue.findIndex(t => !t.deliveredVia);
+        if (unclaimedIdx !== -1) {
+            const candidate = taskQueue[unclaimedIdx];
+            const claimed = claimTask(candidate.id, 'legacy');
+            if (claimed) {
+                taskQueue.splice(unclaimedIdx, 1);
+                removePendingStreamTask(claimed.id);
+                addLog(io, 'task', `[Legacy] Mengirim perintah tertunda '${claimed.command}' ke Studio.`);
+                return res.json(claimed);
+            }
         }
         waitingPollers.push(res);
-        req.on('close', () => {
+        res.on('close', () => {
             const index = waitingPollers.indexOf(res);
             if (index !== -1) waitingPollers.splice(index, 1);
         });

@@ -4,8 +4,16 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { startBridgeServer, isBridgeHosting, setMcpConnected, isStudioConnected, bridgeReadyPromise } from "./roblox-bridge";
+import {
+  startBridgeServer,
+  isBridgeHosting,
+  setMcpConnected,
+  isStudioConnected,
+  bridgeReadyPromise,
+  getConnectedStudios,
+} from "./roblox-bridge";
 import { addTaskToQueue } from "./task-queue";
 import fs from 'fs';
 import path from 'path';
@@ -42,175 +50,812 @@ const server = new Server(
   }
 );
 
-// 3 & 4. Daftarkan tool call_mcp_tool dan definisikan schema parameternya
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: "call_mcp_tool",
-        description: "ALAT MUTLAK UNTUK ROBLOX. Command: patch_script_source, get_children, get_full_tree, get_script_source, update_script_source, rollback_script, get_logs, create_instance, search_instance, generate_terrain, insert_asset, delete_instance, get_properties, set_properties, script_grep, execute_luau, search_asset.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            command: {
-              type: "string",
-              description: "Perintah yang dieksekusi (contoh: 'set_properties', 'get_full_tree', 'patch_script_source').",
-            },
-            target: {
-              type: "string",
-              description: "Path absolut dari objek target di Roblox Studio (contoh: 'Workspace.Map.Script').",
-            },
-            data: {
-              type: "string",
-              description: "Data tambahan. Untuk set_properties: JSON string dari properti. Untuk delete_instance: kirim 'force' jika descendants > 10. Untuk patch/update: source code.",
-            },
-          },
-          required: ["command"],
+// 3. Definisi Semantic Tools MCP untuk Roblox Studio
+const TOOLS: Tool[] = [
+  {
+    name: "execute_luau",
+    description: "Eksekusi kode Luau sembarang secara langsung di Roblox Studio dan kembalikan output/hasilnya (mendukung return table, primitif, dan console log).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        code: {
+          type: "string",
+          description: "Kode Luau yang akan dieksekusi di Roblox Studio.",
+        },
+        target: {
+          type: "string",
+          description: "Path opsional objek target (contoh: 'Workspace.Map').",
+        },
+        placeId: {
+          type: "number",
+          description: "Place ID Roblox tujuan jika membuka beberapa Studio (multi-Studio routing).",
+        },
+        studioId: {
+          type: "string",
+          description: "Session ID Studio spesifik jika diketahui.",
         },
       },
-    ],
-  };
+      required: ["code"],
+    },
+  },
+  {
+    name: "get_children",
+    description: "Ambil daftar child langsung (nama dan ClassName) dari suatu Instance di Roblox Studio.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path absolut dari objek target di Roblox (contoh: 'Workspace', 'ReplicatedStorage.Modules').",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "get_full_tree",
+    description: "Ambil struktur hierarki pohon instance secara rekursif hingga kedalaman (depth) tertentu.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path root objek untuk hierarki (contoh: 'Workspace', 'StarterGui').",
+        },
+        max_depth: {
+          type: "number",
+          description: "Kedalaman maksimal penelusuran hierarki (default: 2).",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "get_script_source",
+    description: "Baca seluruh isi source code Luau dari sebuah Script, LocalScript, atau ModuleScript.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path absolut ke Script target (contoh: 'ServerScriptService.GameManager').",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "update_script_source",
+    description: "Ganti seluruh isi source code script dengan kode baru. Dilengkapi validasi sintaks otomatis (AST check) dan riwayat rollback.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path absolut ke Script target (contoh: 'ServerScriptService.MainHandler').",
+        },
+        code: {
+          type: "string",
+          description: "Source code Luau baru yang akan ditulis.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target", "code"],
+    },
+  },
+  {
+    name: "patch_script_source",
+    description: "Ganti bagian tertentu dari source code script (search and replace chunk) tanpa menimpa seluruh file.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path absolut ke Script target.",
+        },
+        target_content: {
+          type: "string",
+          description: "Potongan kode lama yang ingin diganti (persis karakter per karakter).",
+        },
+        replacement_content: {
+          type: "string",
+          description: "Potongan kode baru sebagai pengganti.",
+        },
+        allow_multiple: {
+          type: "boolean",
+          description: "Jika true, ganti semua kemunculan alih-alih hanya kemunculan pertama (default: false).",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target", "target_content", "replacement_content"],
+    },
+  },
+  {
+    name: "rollback_script",
+    description: "Kembalikan source code script ke versi sebelumnya dari riwayat backup sesi saat ini.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path absolut ke Script yang ingin di-rollback.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "get_properties",
+    description: "Ambil properti umum, attributes, dan tags dari suatu Instance di Roblox Studio.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path absolut ke Instance (contoh: 'Workspace.Baseplate', 'Lighting').",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "set_properties",
+    description: "Ubah properti dari suatu Instance di Roblox Studio menggunakan key-value JSON.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path absolut ke Instance target (contoh: 'Workspace.Part').",
+        },
+        properties: {
+          type: "object",
+          description: "Objek key-value properti (contoh: { \"Anchored\": true, \"Size\": [10, 2, 10], \"Color\": [255, 0, 0] }).",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target", "properties"],
+    },
+  },
+  {
+    name: "create_instance",
+    description: "Buat Instance baru di Roblox Studio di bawah parent target dengan ClassName dan properti awal opsional.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        class_name: {
+          type: "string",
+          description: "ClassName Roblox (contoh: 'Part', 'Folder', 'RemoteEvent', 'Script').",
+        },
+        target: {
+          type: "string",
+          description: "Path parent tempat Instance akan dibuat (contoh: 'Workspace', 'ReplicatedStorage').",
+        },
+        properties: {
+          type: "object",
+          description: "Properti awal opsional yang disetel saat instance dibuat.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["class_name", "target"],
+    },
+  },
+  {
+    name: "delete_instance",
+    description: "Hapus (Destroy) Instance dari game. Service utama dilindungi guardrail dan objek dengan >10 descendant memerlukan force: true.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path absolut ke Instance yang ingin dihapus.",
+        },
+        force: {
+          type: "boolean",
+          description: "Wajib disetel ke true jika instance memiliki lebih dari 10 descendants.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "search_instance",
+    description: "Cari Instance berdasarkan nama atau substring di dalam hierarki Roblox Studio.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Nama atau substring instance yang dicari.",
+        },
+        target: {
+          type: "string",
+          description: "Scope root opsional tempat mencari (default: seluruh service utama).",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "generate_terrain",
+    description: "Generate blok voxel terrain di Workspace.Terrain dengan material, posisi, dan ukuran tertentu.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        material: {
+          type: "string",
+          description: "Nama material terrain (contoh: 'Grass', 'Water', 'Sand', 'Rock', 'Snow').",
+        },
+        position: {
+          type: "array",
+          items: { type: "number" },
+          description: "Posisi voxel region [X, Y, Z].",
+        },
+        size: {
+          type: "array",
+          items: { type: "number" },
+          description: "Ukuran dimensi voxel region [X, Y, Z].",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["material", "position", "size"],
+    },
+  },
+  {
+    name: "insert_asset",
+    description: "Muat dan masukkan aset Roblox (Model/Package) berdasarkan Asset ID ke dalam Workspace atau target tertentu.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        asset_id: {
+          type: "string",
+          description: "Roblox Asset ID angka (atau rbxassetid://).",
+        },
+        target: {
+          type: "string",
+          description: "Parent tujuan tempat menempatkan model (default: 'Workspace').",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["asset_id"],
+    },
+  },
+  {
+    name: "search_asset",
+    description: "Cari aset publik di Roblox Creator Store / Marketplace (Model, Audio, Decal, Image).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        keyword: {
+          type: "string",
+          description: "Kata kunci pencarian aset.",
+        },
+        category: {
+          type: "string",
+          enum: ["Model", "Audio", "Decal", "Image"],
+          description: "Kategori aset yang dicari (default: 'Model').",
+        },
+      },
+      required: ["keyword"],
+    },
+  },
+  {
+    name: "script_grep",
+    description: "Cari teks atau pola (pattern) di dalam seluruh script di dalam game (Workspace, ServerScriptService, dll.).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "String atau pola teks yang ingin dicari di baris kode.",
+        },
+        target: {
+          type: "string",
+          description: "Scope root opsional tempat mencari script.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_logs",
+    description: "Ambil log konsol / output terbaru Roblox Studio yang ditangkap oleh plugin.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+    },
+  },
+  {
+    name: "list_connected_studios",
+    description: "Lihat daftar seluruh sesi Roblox Studio yang sedang terhubung ke Bridge Server, Place ID masing-masing, status koneksi, dan transport (WebSocket/Long-Polling).",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "call_mcp_tool",
+    description: "Legacy tool dispatcher untuk kompatibilitas mundur. Mendukung semua command: execute_luau, get_children, get_full_tree, get_script_source, update_script_source, patch_script_source, rollback_script, get_properties, set_properties, create_instance, delete_instance, search_instance, generate_terrain, insert_asset, search_asset, script_grep, get_logs.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "Nama perintah yang dieksekusi.",
+        },
+        target: {
+          type: "string",
+          description: "Path objek target di Roblox Studio.",
+        },
+        data: {
+          type: "string",
+          description: "Data tambahan sesuai command.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["command"],
+    },
+  },
+];
+
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return { tools: TOOLS };
 });
 
-// 5. Handler untuk menangani pemanggilan call_mcp_tool
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  await bridgeReadyPromise;
-  if (request.params.name !== "call_mcp_tool") {
-    throw new Error(`Tool tidak dikenali: ${request.params.name}`);
-  }
+/**
+ * Dispatcher pusat untuk meneruskan task ke Roblox Studio (Bridge Hosting lokal atau eksternal).
+ */
+async function dispatchTaskToStudio(
+  command: string,
+  target: string,
+  data?: string,
+  options?: { placeId?: number; studioId?: string }
+): Promise<any> {
+  const placeId = options?.placeId;
+  const studioId = options?.studioId;
 
-  const args = request.params.arguments as {
-    command: string;
-    target: string;
-    data?: string;
-  };
-
-  const { command, target, data } = args;
-
-  if (!command) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            status: "error",
-            error: "Parameter 'command' wajib diisi.",
-          }),
-        },
-      ],
-      isError: true,
-    };
-  }
-
-  // Pre-commit validation for full source replacement
-  if (command === "update_script_source" && data) {
-      const validation = validateLuauSyntax(String(data));
-      if (!validation.valid) {
-          return {
-              content: [{
-                  type: "text",
-                  text: JSON.stringify({
-                      status: "error",
-                      error: `Syntax error terdeteksi (Pre-commit check Node.js): ${validation.error} pada baris ${validation.line || 'unknown'}`
-                  })
-              }],
-              isError: true
-          };
+  if (isBridgeHosting) {
+    if (!isStudioConnected({ placeId, studioId })) {
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 50));
+        if (isStudioConnected({ placeId, studioId })) break;
       }
-  }
-
-  // Intercept command yang dieksekusi di server lokal (Node.js) alih-alih di Studio
-  if (command === "search_asset" && data) {
+      if (!isStudioConnected({ placeId, studioId })) {
+        const errorMsg = placeId !== undefined
+          ? `Roblox Studio dengan Place ID ${placeId} tidak terdeteksi aktif. Studio yang saat ini terhubung: ${JSON.stringify(getConnectedStudios())}`
+          : "Roblox Studio tidak terdeteksi aktif. Pastikan Roblox Studio dibuka, place telah dimuat, dan plugin nvstudio-mcp dalam status terhubung.";
+        throw new Error(errorMsg);
+      }
+    }
+    return await addTaskToQueue(command, target, data, { placeId, studioId });
+  } else {
+    let forwardedToBridge = false;
     try {
-      const queryParams = typeof data === "string" ? JSON.parse(data) : data;
-      const keyword = encodeURIComponent(queryParams.keyword || "");
-      let assetType = "10"; // Default: Model
-      
-      if (queryParams.category === "Audio") {
-          assetType = "9"; // Audio
-      } else if (queryParams.category === "Decal" || queryParams.category === "Image") {
-          assetType = "13"; // Decal
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 35000);
+      const bridgeRes = await fetch("http://localhost:3055/api/tasks/enqueue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command, target, data, placeId, studioId }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (bridgeRes.ok) {
+        forwardedToBridge = true;
+        const bridgeJson = (await bridgeRes.json()) as any;
+        if (bridgeJson.status === "error") {
+          throw new Error(bridgeJson.error);
+        }
+        return bridgeJson.result;
+      } else {
+        throw new Error(`Bridge server returned HTTP ${bridgeRes.status}`);
       }
-      
-      const url = `https://catalog.roblox.com/v1/search/items?category=All&keyword=${keyword}&limit=10&itemTypes=Asset&assetTypes=${assetType}`;
-      const res = await fetch(url);
-      const jsonRes = await res.json();
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              status: "success",
-              result: jsonRes.data || jsonRes
-            }, null, 2)
-          }
-        ]
-      };
     } catch (err: any) {
-      return {
-        content: [{ type: "text", text: JSON.stringify({ status: "error", error: "Gagal mencari aset: " + err.message }) }],
-        isError: true
-      };
+      if (forwardedToBridge) throw err;
+      throw new Error("Gagal menghubungi server Bridge. Pastikan server daemon berjalan di port 3055.");
     }
   }
+}
 
-  // 8. Teruskan ke antrean tugas
+/**
+ * Helper untuk mengeksekusi pencarian aset di katalog web Roblox.
+ */
+async function handleSearchAsset(keyword: string, category: string = "Model") {
+  const encodedKeyword = encodeURIComponent(keyword || "");
+  let assetType = "10"; // Default: Model
+  if (category === "Audio") {
+    assetType = "9";
+  } else if (category === "Decal" || category === "Image") {
+    assetType = "13";
+  }
+
+  const url = `https://catalog.roblox.com/v1/search/items?category=All&keyword=${encodedKeyword}&limit=10&itemTypes=Asset&assetTypes=${assetType}`;
+  const res = await fetch(url);
+  const jsonRes = await res.json();
+  return jsonRes.data || jsonRes;
+}
+
+// 4. Handler untuk memproses panggilan tools
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  await bridgeReadyPromise;
+  const toolName = request.params.name;
+  const args = (request.params.arguments || {}) as Record<string, any>;
+
   try {
     let result: any;
-    if (isBridgeHosting) {
-      // Instance ini sendiri yang meng-host bridge server
-      if (!isStudioConnected()) {
-        for (let i = 0; i < 6; i++) {
-          await new Promise(r => setTimeout(r, 50));
-          if (isStudioConnected()) break;
-        }
-        if (!isStudioConnected()) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  status: "error",
-                  error: "Roblox Studio tidak terdeteksi aktif. Pastikan Roblox Studio dibuka, place telah dimuat, dan plugin nvstudio-mcp dalam status terhubung.",
-                }),
-              },
-            ],
-            isError: true,
-          };
-        }
-      }
-      result = await addTaskToQueue(command, target, data);
-    } else {
-      // Bridge server aktif di proses background lain (port 3055)
-      let forwardedToBridge = false;
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 35000);
-        const bridgeRes = await fetch("http://localhost:3055/api/tasks/enqueue", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ command, target, data }),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
 
-        if (bridgeRes.ok) {
-          forwardedToBridge = true;
-          const bridgeJson = await bridgeRes.json() as any;
-          if (bridgeJson.status === "error") {
-            throw new Error(bridgeJson.error);
-          }
-          result = bridgeJson.result;
-        } else {
-          throw new Error(`Bridge server returned HTTP ${bridgeRes.status}`);
-        }
-      } catch (err: any) {
-        if (forwardedToBridge) {
-          throw err;
-        }
-        throw new Error("Gagal menghubungi server Bridge. Pastikan server daemon berjalan di port 3055.");
+    switch (toolName) {
+      case "execute_luau": {
+        const code = String(args.code ?? "");
+        if (!code) throw new Error("Parameter 'code' wajib diisi.");
+        result = await dispatchTaskToStudio("execute_luau", args.target || "", code, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
       }
+
+      case "get_children": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        result = await dispatchTaskToStudio("get_children", target, "", {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "get_full_tree": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const depth = String(args.max_depth ?? 2);
+        result = await dispatchTaskToStudio("get_full_tree", target, depth, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "get_script_source": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        result = await dispatchTaskToStudio("get_script_source", target, "", {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "update_script_source": {
+        const target = String(args.target ?? "");
+        const code = String(args.code ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+
+        // Pre-commit AST syntax check di Node.js
+        const validation = validateLuauSyntax(code);
+        if (!validation.valid) {
+          throw new Error(`Syntax error terdeteksi (Pre-commit check Node.js): ${validation.error} pada baris ${validation.line || 'unknown'}`);
+        }
+
+        backupScript(target, code);
+        result = await dispatchTaskToStudio("update_script_source", target, code, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "patch_script_source": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        if (!args.target_content) throw new Error("Parameter 'target_content' wajib diisi.");
+        if (args.replacement_content === undefined) throw new Error("Parameter 'replacement_content' wajib diisi.");
+
+        const payload = JSON.stringify({
+          target_content: args.target_content,
+          replacement_content: args.replacement_content,
+          allow_multiple: !!args.allow_multiple,
+        });
+
+        result = await dispatchTaskToStudio("patch_script_source", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "rollback_script": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        result = await dispatchTaskToStudio("rollback_script", target, "", {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "get_properties": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        result = await dispatchTaskToStudio("get_properties", target, "", {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "set_properties": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        if (!args.properties) throw new Error("Parameter 'properties' wajib diisi.");
+        const propsData = typeof args.properties === "string" ? args.properties : JSON.stringify(args.properties);
+        result = await dispatchTaskToStudio("set_properties", target, propsData, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "create_instance": {
+        const className = String(args.class_name ?? "");
+        const target = String(args.target ?? "");
+        if (!className) throw new Error("Parameter 'class_name' wajib diisi.");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const payload = JSON.stringify({
+          ClassName: className,
+          Properties: args.properties || {},
+        });
+        result = await dispatchTaskToStudio("create_instance", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "delete_instance": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const data = args.force ? "force" : "";
+        result = await dispatchTaskToStudio("delete_instance", target, data, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "search_instance": {
+        const query = String(args.query ?? "");
+        if (!query) throw new Error("Parameter 'query' wajib diisi.");
+        result = await dispatchTaskToStudio("search_instance", args.target || "", query, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "generate_terrain": {
+        const material = String(args.material ?? "");
+        if (!material) throw new Error("Parameter 'material' wajib diisi.");
+        if (!args.position || !Array.isArray(args.position)) throw new Error("Parameter 'position' [X, Y, Z] wajib diisi.");
+        if (!args.size || !Array.isArray(args.size)) throw new Error("Parameter 'size' [X, Y, Z] wajib diisi.");
+        const payload = JSON.stringify({
+          Material: material,
+          Position: args.position,
+          Size: args.size,
+        });
+        result = await dispatchTaskToStudio("generate_terrain", "", payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "insert_asset": {
+        const assetId = String(args.asset_id ?? "");
+        if (!assetId) throw new Error("Parameter 'asset_id' wajib diisi.");
+        result = await dispatchTaskToStudio("insert_asset", args.target || "Workspace", assetId, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "search_asset": {
+        const keyword = String(args.keyword ?? "");
+        if (!keyword) throw new Error("Parameter 'keyword' wajib diisi.");
+        result = await handleSearchAsset(keyword, args.category);
+        break;
+      }
+
+      case "script_grep": {
+        const query = String(args.query ?? "");
+        if (!query) throw new Error("Parameter 'query' wajib diisi.");
+        result = await dispatchTaskToStudio("script_grep", args.target || "", query, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "get_logs": {
+        result = await dispatchTaskToStudio("get_logs", "", "", {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "list_connected_studios": {
+        if (isBridgeHosting) {
+          result = getConnectedStudios();
+        } else {
+          try {
+            const statsRes = await fetch("http://localhost:3055/api/stats");
+            const statsJson = (await statsRes.json()) as any;
+            result = statsJson.connectedStudios || [];
+          } catch {
+            result = [];
+          }
+        }
+        break;
+      }
+
+      case "call_mcp_tool": {
+        const { command, target, data, placeId, studioId } = args as {
+          command: string;
+          target?: string;
+          data?: string;
+          placeId?: number;
+          studioId?: string;
+        };
+
+        if (!command) throw new Error("Parameter 'command' wajib diisi.");
+
+        // Pre-commit validation for full source replacement
+        if (command === "update_script_source" && data) {
+          const validation = validateLuauSyntax(String(data));
+          if (!validation.valid) {
+            throw new Error(`Syntax error terdeteksi (Pre-commit check Node.js): ${validation.error} pada baris ${validation.line || 'unknown'}`);
+          }
+          if (target) backupScript(target, String(data));
+        }
+
+        // Intercept search_asset di Node.js
+        if (command === "search_asset" && data) {
+          const queryParams = typeof data === "string" ? JSON.parse(data) : data;
+          result = await handleSearchAsset(queryParams.keyword || "", queryParams.category);
+          break;
+        }
+
+        result = await dispatchTaskToStudio(command, target || "", data, { placeId, studioId });
+        break;
+      }
+
+      default:
+        throw new Error(`Tool tidak dikenali: ${toolName}`);
     }
 
     return {
@@ -237,30 +882,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// 8. Jalankan koneksi MCP menggunakan StdioServerTransport (hanya jika bukan mode Daemon)
+// 5. Jalankan koneksi MCP menggunakan StdioServerTransport (hanya jika bukan mode Daemon)
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[nvstudio-mcp] MCP Server aktif melalui StdioServerTransport.");
 
-  // Beritahu SSE plugin bahwa MCP agent sekarang aktif
+  // Beritahu SSE/WS plugin bahwa MCP agent sekarang aktif
   setMcpConnected(true);
 
   let isShuttingDown = false;
   const shutdown = () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
-    setMcpConnected(false); // Beritahu SSE plugin bahwa MCP agent sudah menutup koneksi
+    setMcpConnected(false);
     console.error("[nvstudio-mcp] Koneksi ditutup oleh IDE. Mematikan server...");
     process.exit(0);
   };
 
-  // Tangani penutupan koneksi stdin (ketika IDE menutup pipe)
   process.stdin.on('close', shutdown);
   process.stdin.on('end', shutdown);
   process.stdin.on('error', shutdown);
-
-  // Fallback dihapus karena menyebabkan disconnect palsu di beberapa environment AGY
 }
 
 if (isDaemon) {
