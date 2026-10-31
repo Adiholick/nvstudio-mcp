@@ -824,7 +824,7 @@ function startConnectionLoop()
 					handleSSELine(line)
 				end
 			end
-			task.wait(0.8)
+			task.wait(0.05) -- Instant loop: server menahan request (hanging GET) saat idle
 		else
 			consecutiveErrors = consecutiveErrors + 1
 			-- Toleransi 2x gagal sebelum menandai server unreachable
@@ -1088,7 +1088,8 @@ end
     if targetInstance and targetInstance ~= game then
         local descendants = {}
         pcall(function() descendants = targetInstance:GetDescendants() end)
-        for _, desc in ipairs(descendants) do
+        for i, desc in ipairs(descendants) do
+            if i % 300 == 0 then task.wait() end
             if matchCount >= MAX_MATCHES then break end
             if desc:IsA("LuaSourceContainer") then
                 if searchInScript(desc) then
@@ -1100,7 +1101,8 @@ end
         for _, service in ipairs(searchableServices) do
             local descendants = {}
             pcall(function() descendants = service:GetDescendants() end)
-            for _, desc in ipairs(descendants) do
+            for i, desc in ipairs(descendants) do
+                if i % 300 == 0 then task.wait() end
                 if matchCount >= MAX_MATCHES then break end
                 if desc:IsA("LuaSourceContainer") then
                     if searchInScript(desc) then

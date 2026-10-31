@@ -5,7 +5,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { startBridgeServer, isBridgeHosting, setMcpConnected, isStudioConnected } from "./roblox-bridge";
+import { startBridgeServer, isBridgeHosting, setMcpConnected, isStudioConnected, bridgeReadyPromise } from "./roblox-bridge";
 import { addTaskToQueue } from "./task-queue";
 import fs from 'fs';
 import path from 'path';
@@ -74,6 +74,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // 5. Handler untuk menangani pemanggilan call_mcp_tool
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  await bridgeReadyPromise;
   if (request.params.name !== "call_mcp_tool") {
     throw new Error(`Tool tidak dikenali: ${request.params.name}`);
   }
@@ -160,7 +161,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (isBridgeHosting) {
       // Instance ini sendiri yang meng-host bridge server
       if (!isStudioConnected()) {
-        await new Promise(r => setTimeout(r, 2000));
+        for (let i = 0; i < 6; i++) {
+          await new Promise(r => setTimeout(r, 50));
+          if (isStudioConnected()) break;
+        }
         if (!isStudioConnected()) {
           return {
             content: [

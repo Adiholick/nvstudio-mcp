@@ -16,6 +16,10 @@ interface ActivityLog {
 }
 
 export let isBridgeHosting = false;
+let resolveBridgeReady: (val: boolean) => void;
+export const bridgeReadyPromise = new Promise<boolean>((resolve) => {
+    resolveBridgeReady = resolve;
+});
 
 // Global process error handlers agar server bridge tidak mati mendadak
 process.on('uncaughtException', (err) => {
@@ -45,23 +49,62 @@ interface SsePeer {
 const studioEventQueues = new Map<string, Array<Record<string, unknown>>>();
 const studioLastSeen = new Map<string, number>();
 
+interface StudioPoller {
+    res: express.Response;
+    timer: NodeJS.Timeout;
+}
+const activeStudioPollers = new Map<string, StudioPoller>();
+
 setInterval(() => {
     const now = Date.now();
     let changed = false;
     for (const [sid, lastSeen] of studioLastSeen.entries()) {
-        if (now - lastSeen > 6000) {
+        if (now - lastSeen > 35000) {
             studioEventQueues.delete(sid);
             studioLastSeen.delete(sid);
+            const poller = activeStudioPollers.get(sid);
+            if (poller) {
+                clearTimeout(poller.timer);
+                try { poller.res.end(); } catch {}
+                activeStudioPollers.delete(sid);
+            }
             changed = true;
         }
     }
     if (changed) {
         broadcastStatus();
     }
-}, 3000);
+}, 5000);
 
 export function isStudioConnected(): boolean {
-    return studioEventQueues.size > 0;
+    return studioEventQueues.size > 0 || activeStudioPollers.size > 0;
+}
+
+function flushEventsToStudio(sid: string): boolean {
+    const poller = activeStudioPollers.get(sid);
+    if (!poller) return false;
+
+    const queue = studioEventQueues.get(sid) ?? [];
+    if (queue.length === 0) return false;
+
+    studioEventQueues.set(sid, []); // kosongkan antrian
+    clearTimeout(poller.timer);
+    activeStudioPollers.delete(sid);
+
+    const events: Array<Record<string, unknown>> = [
+        { kind: 'status', mcpConnected, studioCount: Math.max(studioEventQueues.size, 1), serverVersion: SERVER_VERSION },
+        ...queue
+    ];
+
+    try {
+        poller.res.setHeader('Content-Type', 'text/plain');
+        poller.res.setHeader('Cache-Control', 'no-cache, no-store');
+        const body = events.map(ev => `data: ${JSON.stringify(ev)}`).join('\n');
+        poller.res.send(body);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 function enqueueForStudio(studioId: string | null, event: Record<string, unknown>) {
@@ -71,11 +114,13 @@ function enqueueForStudio(studioId: string | null, event: Record<string, unknown
         const q = studioEventQueues.get(studioId)!;
         q.push(event);
         if (q.length > 100) q.shift();
+        flushEventsToStudio(studioId);
     } else {
         // Broadcast ke semua studio yang terdaftar
         for (const [sid, q] of studioEventQueues.entries()) {
             q.push(event);
             if (q.length > 100) q.shift();
+            flushEventsToStudio(sid);
         }
     }
 }
@@ -237,11 +282,11 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
         });
     });
 
-    // ── /api/stream (Snapshot endpoint untuk Roblox GetAsync) ───────────────
-    // Roblox HttpService:GetAsync() TIDAK bisa streaming — ia block sampai
-    // koneksi ditutup. Endpoint ini: daftarkan studio, kirim semua events
-    // yang tertunda (status + queued tasks), lalu TUTUP koneksi.
-    // Plugin mengulang GET ini setiap ~0.5 detik (pseudo-polling via snapshot).
+    // ── /api/stream (True Long-Polling endpoint untuk Roblox GetAsync) ─────
+    // Roblox HttpService:GetAsync() menahan koneksi sampai server merespons.
+    // Jika ada task yang menunggu: kirim seketika (<1ms).
+    // Jika tidak ada task: tahan koneksi (hanging GET) hingga task baru tiba
+    // atau timeout 15 detik (heartbeat) untuk menjaga koneksi tetap segar.
     app.get('/api/stream', (req, res) => {
         const studioId = (req.query.studioId as string) || `anon-${Date.now()}`;
         studioLastSeen.set(studioId, Date.now());
@@ -249,7 +294,7 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
         // Daftarkan studio jika belum ada
         if (!studioEventQueues.has(studioId)) {
             studioEventQueues.set(studioId, []);
-            io.emit('studio-status', { connected: true, studioCount: studioEventQueues.size, studioId });
+            io.emit('studio-status', { connected: true, studioCount: Math.max(studioEventQueues.size, 1), studioId });
             addLog(io, 'system', `Studio terdaftar. (ID: ${studioId.substring(0, 8)}…, Total: ${studioEventQueues.size})`);
 
             if (!isDaemon && !dashboardOpened) {
@@ -262,28 +307,54 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
             }
         }
 
-        // Kumpulkan semua events yang belum dikirim ke studio ini
-        const queue = studioEventQueues.get(studioId) ?? [];
-        studioEventQueues.set(studioId, []); // kosongkan antrian
-
-        // Selalu sertakan status terkini
-        const events: Array<Record<string, unknown>> = [
-            { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: SERVER_VERSION },
-        ];
-
-        // Tambahkan events tertunda (misalnya task requests)
-        for (const ev of queue) {
-            // Hindari duplikat status
-            if (ev.kind !== 'status') events.push(ev);
+        // Jika poller lama untuk studio ini masih aktif, selesaikan dulu
+        const oldPoller = activeStudioPollers.get(studioId);
+        if (oldPoller) {
+            clearTimeout(oldPoller.timer);
+            try { oldPoller.res.end(); } catch {}
+            activeStudioPollers.delete(studioId);
         }
 
-        // Format sebagai teks SSE (setiap event = satu baris "data: ...\n\n")
-        res.setHeader('Content-Type', 'text/plain');
-        res.setHeader('Cache-Control', 'no-cache, no-store');
-        const body = events
-            .map(ev => `data: ${JSON.stringify(ev)}`)
-            .join('\n');
-        res.send(body);
+        // Kumpulkan semua events yang belum dikirim ke studio ini
+        const queue = studioEventQueues.get(studioId) ?? [];
+        if (queue.length > 0) {
+            studioEventQueues.set(studioId, []); // kosongkan antrian
+            const events: Array<Record<string, unknown>> = [
+                { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: SERVER_VERSION },
+            ];
+            for (const ev of queue) {
+                if (ev.kind !== 'status') events.push(ev);
+            }
+            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader('Cache-Control', 'no-cache, no-store');
+            const body = events.map(ev => `data: ${JSON.stringify(ev)}`).join('\n');
+            return res.send(body);
+        }
+
+        // Jika antrean kosong, TAHAN koneksi (Long-Polling) maksimal 15 detik
+        const timer = setTimeout(() => {
+            activeStudioPollers.delete(studioId);
+            try {
+                const events = [
+                    { kind: 'heartbeat', timestamp: Date.now() },
+                    { kind: 'status', mcpConnected, studioCount: studioEventQueues.size, serverVersion: SERVER_VERSION }
+                ];
+                res.setHeader('Content-Type', 'text/plain');
+                res.setHeader('Cache-Control', 'no-cache, no-store');
+                const body = events.map(ev => `data: ${JSON.stringify(ev)}`).join('\n');
+                res.send(body);
+            } catch {}
+        }, 15000);
+
+        activeStudioPollers.set(studioId, { res, timer });
+
+        req.on('close', () => {
+            const current = activeStudioPollers.get(studioId);
+            if (current && current.res === res) {
+                clearTimeout(current.timer);
+                activeStudioPollers.delete(studioId);
+            }
+        });
     });
 
     // ── /api/events (SSE persisten untuk browser/klien modern) ───────────────
@@ -372,9 +443,12 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
         const { command, target, data } = req.body;
         
         // Fast-check: pastikan setidaknya 1 Studio aktif polling
-        if (studioEventQueues.size === 0) {
-            await new Promise(r => setTimeout(r, 2000));
-            if (studioEventQueues.size === 0) {
+        if (!isStudioConnected()) {
+            for (let i = 0; i < 6; i++) {
+                await new Promise(r => setTimeout(r, 50));
+                if (isStudioConnected()) break;
+            }
+            if (!isStudioConnected()) {
                 return res.json({
                     status: 'error',
                     error: 'Roblox Studio tidak terdeteksi aktif. Pastikan Roblox Studio dibuka, place telah dimuat, dan plugin nvstudio-mcp dalam status terhubung.'
@@ -428,6 +502,7 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
         const server = httpServer.listen(port, () => {
             isBridgeHosting = true;
             console.error(`[Bridge] SSE Bridge Server aktif di http://localhost:${port}`);
+            resolveBridgeReady(true);
         });
 
         server.on('error', async (err: NodeJS.ErrnoException) => {
@@ -440,6 +515,7 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
                     if (pingRes.ok) {
                         isBridgeHosting = false;
                         console.error(`[Bridge] Port ${port} sudah digunakan oleh NVStudio Bridge aktif. Menggunakan instance yang sudah berjalan.`);
+                        resolveBridgeReady(false);
                         return;
                     }
                 } catch { /* bukan NVStudio bridge */ }
@@ -447,12 +523,14 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
                 if (retriesLeft > 0) {
                     console.error(`[Bridge] Port ${port} zombie. Mencoba membunuh...`);
                     killZombieOnPort(port);
-                    setTimeout(() => tryListen(retriesLeft - 1), 1500);
+                    setTimeout(() => tryListen(retriesLeft - 1), 500);
                 } else {
                     console.error(`[Bridge] FATAL: Port ${port} tidak dapat dibuka.`);
+                    resolveBridgeReady(false);
                 }
             } else {
                 console.error(`[Bridge] FATAL: Gagal mendengarkan port ${port}:`, err.message);
+                resolveBridgeReady(false);
                 process.exit(1);
             }
         });

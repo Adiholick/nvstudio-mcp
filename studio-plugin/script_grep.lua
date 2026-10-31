@@ -48,7 +48,8 @@ return function(targetInstance, data, ctx, targetPath)
     if targetInstance and targetInstance ~= game then
         local descendants = {}
         pcall(function() descendants = targetInstance:GetDescendants() end)
-        for _, desc in ipairs(descendants) do
+        for i, desc in ipairs(descendants) do
+            if i % 300 == 0 then task.wait() end
             if matchCount >= MAX_MATCHES then break end
             if desc:IsA("LuaSourceContainer") then
                 if searchInScript(desc) then
@@ -60,7 +61,8 @@ return function(targetInstance, data, ctx, targetPath)
         for _, service in ipairs(searchableServices) do
             local descendants = {}
             pcall(function() descendants = service:GetDescendants() end)
-            for _, desc in ipairs(descendants) do
+            for i, desc in ipairs(descendants) do
+                if i % 300 == 0 then task.wait() end
                 if matchCount >= MAX_MATCHES then break end
                 if desc:IsA("LuaSourceContainer") then
                     if searchInScript(desc) then

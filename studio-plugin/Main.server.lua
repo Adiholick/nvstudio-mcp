@@ -335,7 +335,7 @@ function startConnectionLoop()
 					handleSSELine(line)
 				end
 			end
-			task.wait(0.8)
+			task.wait(0.05) -- Instant loop: server menahan request (hanging GET) saat idle
 		else
 			consecutiveErrors = consecutiveErrors + 1
 			-- Toleransi 2x gagal sebelum menandai server unreachable
