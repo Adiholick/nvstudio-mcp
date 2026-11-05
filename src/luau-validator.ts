@@ -4,33 +4,35 @@ export interface ValidationResult {
     line?: number;
 }
 
+/**
+ * Heuristic pre-commit syntax validator for Luau.
+ * Validates bracket parity, string literals, multiline comments,
+ * and block keywords (function, do, statement if ... then, repeat ... until, end).
+ */
 export function validateLuauSyntax(source: string): ValidationResult {
     const lines = source.split('\n');
-    
-    // Stack for blocks: function, do, if, for, while, repeat
-    // We'll keep it simple: just count block openers vs block closers (end, until)
-    // Note: This is a heuristic pre-commit check. It doesn't replace a full AST parser,
-    // Bracket stacks
-    let parenDepth = 0; // ()
-    let braceDepth = 0; // {}
+    let parenDepth = 0;   // ()
+    let braceDepth = 0;   // {}
     let bracketDepth = 0; // []
+    let blockDepth = 0;   // function, do, if ... then -> end
+    let repeatDepth = 0;  // repeat -> until
 
     let inString = false;
     let stringChar = '';
     let inMultilineString = false;
     let multilineEqCount = 0;
-
     let inMultilineComment = false;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         let j = 0;
+        const lineTokens: string[] = [];
 
         while (j < line.length) {
             const char = line[j];
             const nextChar = line[j + 1] || '';
 
-            // Handle multiline comments
+            // Multiline comment start: --[[ or --[===[
             if (!inString && !inMultilineString && !inMultilineComment) {
                 if (char === '-' && nextChar === '-') {
                     const nextNextChar = line[j + 2] || '';
@@ -45,7 +47,7 @@ export function validateLuauSyntax(source: string): ValidationResult {
                             continue;
                         }
                     }
-                    // Single line comment, skip rest of line
+                    // Single-line comment, ignore rest of line
                     break;
                 }
             }
@@ -65,7 +67,7 @@ export function validateLuauSyntax(source: string): ValidationResult {
                 continue;
             }
 
-            // Handle strings
+            // String literals
             if (!inString && !inMultilineString) {
                 if (char === '"' || char === "'") {
                     inString = true;
@@ -73,7 +75,6 @@ export function validateLuauSyntax(source: string): ValidationResult {
                     j++;
                     continue;
                 }
-                
                 if (char === '[') {
                     let k = j + 1;
                     let eq = 0;
@@ -83,10 +84,6 @@ export function validateLuauSyntax(source: string): ValidationResult {
                         multilineEqCount = eq;
                         j = k + 1;
                         continue;
-                    }
-                    // If it ended at end of line, we can't reliably detect it. Let's just avoid bracket counting
-                    if (line[k] === undefined) {
-                        break;
                     }
                 }
             }
@@ -118,31 +115,81 @@ export function validateLuauSyntax(source: string): ValidationResult {
                 continue;
             }
 
-            // At this point, we are outside strings and comments.
-            // Check brackets
-            if (!inString && !inMultilineString && !inMultilineComment) {
-                if (char === '(') parenDepth++;
-                else if (char === ')') {
-                    parenDepth--;
-                    if (parenDepth < 0) return { valid: false, error: 'Kelebihan tutup kurung ")"', line: i + 1 };
+            // Outside strings & comments: collect bracket depth & tokens
+            if (char === '(') { 
+                parenDepth++; 
+                lineTokens.push('('); 
+            } else if (char === ')') {
+                parenDepth--;
+                lineTokens.push(')');
+                if (parenDepth < 0) return { valid: false, error: 'Kelebihan tutup kurung ")"', line: i + 1 };
+            } else if (char === '{') { 
+                braceDepth++; 
+                lineTokens.push('{'); 
+            } else if (char === '}') {
+                braceDepth--;
+                lineTokens.push('}');
+                if (braceDepth < 0) return { valid: false, error: 'Kelebihan tutup kurawal "}"', line: i + 1 };
+            } else if (char === '[') { 
+                bracketDepth++; 
+                lineTokens.push('['); 
+            } else if (char === ']') {
+                bracketDepth--;
+                lineTokens.push(']');
+                if (bracketDepth < 0) return { valid: false, error: 'Kelebihan tutup siku "]"', line: i + 1 };
+            } else if (char === '=') {
+                lineTokens.push('=');
+            } else if (char === ',') {
+                lineTokens.push(',');
+            } else if (/[a-zA-Z_]/.test(char)) {
+                let start = j;
+                while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) {
+                    j++;
                 }
-                else if (char === '{') braceDepth++;
-                else if (char === '}') {
-                    braceDepth--;
-                    if (braceDepth < 0) return { valid: false, error: 'Kelebihan tutup kurawal "}"', line: i + 1 };
-                }
-                else if (char === '[') bracketDepth++;
-                else if (char === ']') {
-                    bracketDepth--;
-                    if (bracketDepth < 0) return { valid: false, error: 'Kelebihan tutup siku "]"', line: i + 1 };
-                }
+                lineTokens.push(line.substring(start, j));
+                continue;
             }
 
             j++;
         }
-        
+
         if (inString) {
             return { valid: false, error: 'String tidak ditutup (unclosed string literal)', line: i + 1 };
+        }
+
+        // Process line tokens for block balance
+        let statementIfCount = 0;
+        for (let t = 0; t < lineTokens.length; t++) {
+            const tok = lineTokens[t];
+            const prevTok = t > 0 ? lineTokens[t - 1] : null;
+
+            if (tok === 'function') {
+                blockDepth++;
+            } else if (tok === 'do') {
+                blockDepth++;
+            } else if (tok === 'if') {
+                // Luau expression if is preceded by '=', 'return', '(', ',', '{', '[', 'and', 'or', 'not'
+                const isExpr = prevTok && ['=', 'return', '(', ',', '{', '[', 'and', 'or', 'not'].includes(prevTok);
+                if (!isExpr) {
+                    statementIfCount++;
+                }
+            } else if (tok === 'then') {
+                const isElseIf = lineTokens.includes('elseif');
+                if (!isElseIf) {
+                    if (statementIfCount > 0) {
+                        blockDepth++;
+                        statementIfCount--;
+                    }
+                }
+            } else if (tok === 'repeat') {
+                repeatDepth++;
+            } else if (tok === 'until') {
+                repeatDepth--;
+                if (repeatDepth < 0) return { valid: false, error: 'Kelebihan kata kunci "until"', line: i + 1 };
+            } else if (tok === 'end') {
+                blockDepth--;
+                if (blockDepth < 0) return { valid: false, error: 'Kelebihan kata kunci "end"', line: i + 1 };
+            }
         }
     }
 
@@ -152,6 +199,9 @@ export function validateLuauSyntax(source: string): ValidationResult {
     if (parenDepth > 0) return { valid: false, error: 'Kekurangan tutup kurung ")"' };
     if (braceDepth > 0) return { valid: false, error: 'Kekurangan tutup kurawal "}"' };
     if (bracketDepth > 0) return { valid: false, error: 'Kekurangan tutup siku "]"' };
+
+    if (repeatDepth > 0) return { valid: false, error: 'Kekurangan kata kunci "until"' };
+    if (blockDepth > 0) return { valid: false, error: 'Kekurangan kata kunci "end" (blok tidak ditutup)' };
 
     return { valid: true };
 }

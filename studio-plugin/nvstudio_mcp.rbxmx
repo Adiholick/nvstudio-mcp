@@ -10,6 +10,229 @@
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
+		<Item class="ModuleScript" referent="RBX_batch_create_instances">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">batch_create_instances</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ============================================================================
+-- Skill Module: batch_create_instances
+-- Deskripsi: Pembangun Hierarki Instance Massal & Deklaratif (Tree / Batch List)
+-- ============================================================================
+
+local HttpService = game:GetService("HttpService")
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+    local success, config = pcall(function()
+        if type(data) == "table" then return data end
+        return HttpService:JSONDecode(tostring(data))
+    end)
+
+    if not success or type(config) ~= "table" then
+        return { status = "error", error = "Format data JSON tidak valid untuk batch_create_instances." }
+    end
+
+    local setPropsFunc = require(script.Parent:WaitForChild("set_properties"))
+    local defaultParent = targetInstance or game.Workspace
+
+    if config.target and ctx and ctx.getInstanceFromPath then
+        local resolved = ctx.getInstanceFromPath(config.target)
+        if resolved then defaultParent = resolved end
+    end
+
+    local createdList = {}
+    local errors = {}
+    local createdCount = 0
+
+    local function applyProps(inst: Instance, props: any)
+        if not props or type(props) ~= "table" or not next(props) then return end
+        local propJson = HttpService:JSONEncode(props)
+        local res = setPropsFunc(inst, propJson, ctx, inst:GetFullName())
+        if res and res.status == "error" then
+            table.insert(errors, string.format("[%s] Error properti: %s", inst.Name, tostring(res.result or res.error)))
+        end
+    end
+
+    -- 1. MODE HIERARCHICAL TREE (Pohon Bersarang)
+    local function buildTreeNode(parentInst: Instance, node: any): Instance?
+        local className = node.className or node.ClassName
+        if not className or type(className) ~= "string" then
+            table.insert(errors, "Node pohon tidak memiliki ClassName yang valid.")
+            return nil
+        end
+
+        local ok, inst = pcall(function()
+            local newObj = Instance.new(className)
+            if node.name or node.Name then
+                newObj.Name = tostring(node.name or node.Name)
+            end
+            newObj.Parent = parentInst
+            return newObj
+        end)
+
+        if not ok or not inst then
+            table.insert(errors, string.format("Gagal membuat instance '%s': %s", className, tostring(inst)))
+            return nil
+        end
+
+        createdCount = createdCount + 1
+        table.insert(createdList, inst:GetFullName())
+
+        -- Terapkan properti
+        applyProps(inst, node.properties or node.Properties)
+
+        -- Rekursif untuk seluruh child
+        local children = node.children or node.Children
+        if children and type(children) == "table" then
+            for _, childNode in ipairs(children) do
+                buildTreeNode(inst, childNode)
+            end
+        end
+
+        return inst
+    end
+
+    -- Eksekusi Mode Tree jika disediakan
+    if config.tree and type(config.tree) == "table" then
+        buildTreeNode(defaultParent, config.tree)
+    end
+
+    -- 2. MODE FLAT ARRAY (Daftar Instance Terpisah)
+    local instancesArray = config.instances or config.items
+    if instancesArray and type(instancesArray) == "table" then
+        for idx, item in ipairs(instancesArray) do
+            local parentInst = defaultParent
+            if item.parent and ctx and ctx.getInstanceFromPath then
+                local resParent = ctx.getInstanceFromPath(item.parent)
+                if resParent then parentInst = resParent end
+            end
+
+            local className = item.className or item.ClassName
+            if className then
+                local ok, inst = pcall(function()
+                    local newObj = Instance.new(className)
+                    if item.name or item.Name then
+                        newObj.Name = tostring(item.name or item.Name)
+                    end
+                    newObj.Parent = parentInst
+                    return newObj
+                end)
+
+                if ok and inst then
+                    createdCount = createdCount + 1
+                    table.insert(createdList, inst:GetFullName())
+                    applyProps(inst, item.properties or item.Properties)
+                else
+                    table.insert(errors, string.format("Item #%d (%s) gagal dibuat: %s", idx, tostring(className), tostring(inst)))
+                end
+            end
+        end
+    end
+
+    local status = (createdCount > 0 or #errors == 0) and "success" or "error"
+    return {
+        status = status,
+        result = {
+            totalCreated = createdCount,
+            created = createdList,
+            hasErrors = (#errors > 0),
+            errors = errors,
+            message = string.format("Berhasil membuat %d instance secara batch.", createdCount)
+        }
+    }
+end
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_batch_set_properties">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">batch_set_properties</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ============================================================================
+-- Skill Module: batch_set_properties
+-- Deskripsi: Modifikasi Properti Massal untuk Beberapa Instance Sekaligus
+-- ============================================================================
+
+local HttpService = game:GetService("HttpService")
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+    local success, config = pcall(function()
+        if type(data) == "table" then return data end
+        return HttpService:JSONDecode(tostring(data))
+    end)
+
+    if not success or type(config) ~= "table" then
+        return { status = "error", error = "Format data JSON tidak valid untuk batch_set_properties." }
+    end
+
+    local setPropsFunc = require(script.Parent:WaitForChild("set_properties"))
+    local updates = config.updates or config
+    if type(updates) ~= "table" then
+        return { status = "error", error = "Parameter 'updates' harus berupa array pembaruan properti." }
+    end
+
+    local updatedCount = 0
+    local successfulTargets = {}
+    local errors = {}
+
+    for idx, updateItem in ipairs(updates) do
+        local inst = targetInstance
+        local instPath = updateItem.target or updateItem.path
+        if instPath and ctx and ctx.getInstanceFromPath then
+            local resolved = ctx.getInstanceFromPath(instPath)
+            if resolved then
+                inst = resolved
+            else
+                table.insert(errors, string.format("Item #%d: Target path '%s' tidak ditemukan.", idx, tostring(instPath)))
+                continue
+            end
+        end
+
+        local props = updateItem.properties or updateItem.props
+        if inst and props and type(props) == "table" then
+            local propJson = HttpService:JSONEncode(props)
+            local res = setPropsFunc(inst, propJson, ctx, inst:GetFullName())
+            if res and res.status == "error" then
+                table.insert(errors, string.format("[%s]: %s", inst.Name, tostring(res.result or res.error)))
+            else
+                updatedCount = updatedCount + 1
+                table.insert(successfulTargets, inst:GetFullName())
+            end
+        else
+            table.insert(errors, string.format("Item #%d: Instance atau properties tidak valid.", idx))
+        end
+    end
+
+    local status = (updatedCount > 0 or #errors == 0) and "success" or "error"
+    return {
+        status = status,
+        result = {
+            totalUpdated = updatedCount,
+            updatedInstances = successfulTargets,
+            hasErrors = (#errors > 0),
+            errors = errors,
+            message = string.format("Berhasil memperbarui properti untuk %d instance.", updatedCount)
+        }
+    }
+end
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
 		<Item class="ModuleScript" referent="RBX_create_instance">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
@@ -473,28 +696,101 @@ end
 				<string name="Name">insert_asset</string>
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
-				<ProtectedString name="Source"><![CDATA[return function(targetInstance, data, ctx, targetPath)
-    local InsertService = game:GetService("InsertService")
-    local rawId = tostring(data or ""):gsub("rbxassetid://", ""):gsub("%s+", "")
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ============================================================================
+-- Skill Module: insert_asset (Upgraded with Asset Security Scanner & Script Stripper)
+-- ============================================================================
+
+local HttpService = game:GetService("HttpService")
+local InsertService = game:GetService("InsertService")
+
+local SecurityScanner = require(script.Parent:WaitForChild("security_scanner"))
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+    local assetIdStr = ""
+    local stripScripts = true  -- Default TRUE demi keamanan mutlak
+    local scanSecurity = true
+
+    if typeof(data) == "string" then
+        local success, parsed = pcall(function()
+            return HttpService:JSONDecode(data)
+        end)
+        if success and typeof(parsed) == "table" then
+            assetIdStr = tostring(parsed.asset_id or parsed.assetId or "")
+            if parsed.strip_scripts ~= nil then stripScripts = parsed.strip_scripts end
+            if parsed.scan_security ~= nil then scanSecurity = parsed.scan_security end
+        else
+            assetIdStr = data
+        end
+    elseif typeof(data) == "table" then
+        assetIdStr = tostring(data.asset_id or data.assetId or "")
+        if data.strip_scripts ~= nil then stripScripts = data.strip_scripts end
+        if data.scan_security ~= nil then scanSecurity = data.scan_security end
+    end
+
+    local rawId = string.gsub(assetIdStr, "rbxassetid://", "")
+    rawId = string.gsub(rawId, "%s+", "")
     local assetId = tonumber(rawId)
-    if not assetId then
+
+    if not assetId or assetId <= 0 then
         return { status = "error", error = "Asset ID harus berupa angka yang valid." }
     end
-    
+
     local success, model = pcall(function()
         return InsertService:LoadAsset(assetId)
     end)
-    
-    if success and model then
-        if targetInstance == game or targetInstance.ClassName == "DataModel" then
-            model.Parent = game.Workspace
-        else
-            model.Parent = targetInstance
-        end
-        return { status = "success", result = "Aset berhasil dimasukkan ke " .. model.Parent.Name .. "." }
-    else
-        return { status = "error", error = "Gagal memuat aset. Pastikan Asset ID benar dan akun/plugin Anda memiliki izin (Ownership/Public)." }
+
+    if not success or not model then
+        return {
+            status = "error",
+            error = "Gagal memuat aset. Pastikan Asset ID benar dan model berstatus publik di Creator Store."
+        }
     end
+
+    local securityNotes = {}
+    local removedScripts = {}
+
+    -- 1. Scan keamanan jika diaktifkan
+    if scanSecurity then
+        local scanResult = SecurityScanner.scanInstance(model, true)
+        if scanResult.riskLevel == "DANGEROUS" then
+            table.insert(securityNotes, string.format("⚠️ PERINGATAN: Aset ini memiliki %d ancaman BERBAHAYA (Backdoor/Obfuscation/Webhook)!", scanResult.highThreats))
+        end
+    end
+
+    -- 2. Sanitasi: Hapus skrip jika strip_scripts = true
+    if stripScripts then
+        removedScripts = SecurityScanner.stripScripts(model)
+        if #removedScripts > 0 then
+            table.insert(securityNotes, string.format("🛡️ Keamanan: %d skrip bawaan telah dihapus secara otomatis demi keamanan game Anda.", #removedScripts))
+        else
+            table.insert(securityNotes, "🛡️ Keamanan: Aset bersih, tidak ditemukan skrip berbahaya.")
+        end
+    else
+        table.insert(securityNotes, "ℹ️ Catatan: strip_scripts = false, skrip bawaan model dipertahankan.")
+    end
+
+    -- 3. Masukkan model ke target
+    local parentTarget = targetInstance
+    if not parentTarget or parentTarget == game or parentTarget.ClassName == "DataModel" then
+        parentTarget = game.Workspace
+    end
+
+    model.Parent = parentTarget
+
+    return {
+        status = "success",
+        result = {
+            message = string.format("Aset '%s' (ID: %d) berhasil dimasukkan ke %s.", model.Name, assetId, parentTarget.Name),
+            assetName = model.Name,
+            assetId = assetId,
+            parent = parentTarget:GetFullName(),
+            stripScriptsApplied = stripScripts,
+            removedScriptsCount = #removedScripts,
+            removedScripts = removedScripts,
+            securityNotes = table.concat(securityNotes, "\n"),
+        }
+    }
 end
 ]]></ProtectedString>
 			</Properties>
@@ -511,7 +807,7 @@ end
 				<BinaryString name="Tags"></BinaryString>
 				<token name="RunContext">0</token>
 				<ProtectedString name="Source"><![CDATA[-- ══════════════════════════════════════════════════════════════════════
--- NVStudio MCP Plugin v2.2.2
+-- NVStudio MCP Plugin v2.3.0
 -- Arsitektur: Dual-Mode WebSocket Duplex (Port 3055/ws) + Fallback Long-Polling
 -- Plugin auto-connect saat dimuat via WebSocket native, dengan fallback otomatis
 -- ke HTTP stream jika WebSocket tidak tersedia di environment Roblox Studio ini.
@@ -1450,6 +1746,118 @@ end
 ]]></ProtectedString>
 			</Properties>
 		</Item>
+		<Item class="ModuleScript" referent="RBX_preview_asset">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">preview_asset</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ============================================================================
+-- Skill Module: preview_asset
+-- Deskripsi: Pratinjau & Pemindaian Keamanan Aset Creator Store Secara Terisolasi
+-- ============================================================================
+
+local HttpService = game:GetService("HttpService")
+local InsertService = game:GetService("InsertService")
+
+local SecurityScanner = require(script.Parent:WaitForChild("security_scanner"))
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+    local assetIdStr = ""
+    local deepScan = true
+
+    if typeof(data) == "string" then
+        local success, parsed = pcall(function()
+            return HttpService:JSONDecode(data)
+        end)
+        if success and typeof(parsed) == "table" then
+            assetIdStr = tostring(parsed.asset_id or parsed.assetId or "")
+            if parsed.deep_scan ~= nil then deepScan = parsed.deep_scan end
+        else
+            assetIdStr = data
+        end
+    elseif typeof(data) == "table" then
+        assetIdStr = tostring(data.asset_id or data.assetId or "")
+        if data.deep_scan ~= nil then deepScan = data.deep_scan end
+    end
+
+    local cleanIdStr = string.gsub(assetIdStr, "rbxassetid://", "")
+    cleanIdStr = string.gsub(cleanIdStr, "%s+", "")
+    local assetId = tonumber(cleanIdStr)
+
+    if not assetId or assetId <= 0 then
+        return { status = "error", error = "Asset ID tidak valid. Berikan Asset ID angka (contoh: 123456789)." }
+    end
+
+    -- Muat Aset secara terisolasi (unparented / memory only)
+    local ok, model = pcall(function()
+        return InsertService:LoadAsset(assetId)
+    end)
+
+    if not ok or not model then
+        return {
+            status = "error",
+            error = string.format("Gagal memuat aset ID %d. Pastikan Asset ID publik dan terdaftar di Creator Store.", assetId)
+        }
+    end
+
+    local scanResult
+    local scanOk, err = pcall(function()
+        scanResult = SecurityScanner.scanInstance(model, deepScan)
+    end)
+
+    local rootName = model.Name
+    local childrenOverview = {}
+    for _, child in ipairs(model:GetChildren()) do
+        table.insert(childrenOverview, {
+            name = child.Name,
+            className = child.ClassName,
+        })
+    end
+
+    -- Hancurkan model sementara dari memori (Cleanup Mutlak)
+    pcall(function()
+        model:Destroy()
+    end)
+
+    if not scanOk or not scanResult then
+        return {
+            status = "error",
+            error = "Gagal memindai aset: " .. tostring(err)
+        }
+    end
+
+    local recommendation = "Aman untuk dimasukkan langsung menggunakan insert_asset."
+    if scanResult.riskLevel == "DANGEROUS" then
+        recommendation = "PERINGATAN: Aset ini memiliki ancaman BERBAHAYA! Wajib gunakan 'insert_asset' dengan strip_scripts = true, atau hindari aset ini."
+    elseif scanResult.riskLevel == "WARNING" then
+        recommendation = "Perhatian: Aset mengandung skrip atau peringatan moderat. Periksa kembali atau gunakan strip_scripts = true jika skrip tidak diperlukan."
+    end
+
+    return {
+        status = "success",
+        result = {
+            assetId = assetId,
+            assetName = rootName,
+            riskLevel = scanResult.riskLevel,
+            recommendation = recommendation,
+            stats = scanResult.stats,
+            highThreatsCount = scanResult.highThreats,
+            mediumThreatsCount = scanResult.mediumThreats,
+            threats = scanResult.threats,
+            topLevelChildren = childrenOverview,
+        }
+    }
+end
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
 		<Item class="ModuleScript" referent="RBX_rollback_script">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
@@ -1479,6 +1887,100 @@ end
         return { status = "error", error = "Target BUKAN Script (ClassName: " .. targetInstance.ClassName .. ")." }
     end
 end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_scan_security">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">scan_security</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ============================================================================
+-- Skill Module: scan_security
+-- Deskripsi: Audit Keamanan Instance/Model yang Sudah Ada di Tempat Kerja Studio
+-- ============================================================================
+
+local HttpService = game:GetService("HttpService")
+local SecurityScanner = require(script.Parent:WaitForChild("security_scanner"))
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+    local target = targetInstance or game.Workspace
+    local deepScan = true
+    local cleanThreats = false
+
+    if typeof(data) == "string" and #data > 0 then
+        local success, parsed = pcall(function()
+            return HttpService:JSONDecode(data)
+        end)
+        if success and typeof(parsed) == "table" then
+            if parsed.deep_scan ~= nil then deepScan = parsed.deep_scan end
+            if parsed.clean_threats ~= nil then cleanThreats = parsed.clean_threats end
+        end
+    elseif typeof(data) == "table" then
+        if data.deep_scan ~= nil then deepScan = data.deep_scan end
+        if data.clean_threats ~= nil then cleanThreats = data.clean_threats end
+    end
+
+    local scanResult
+    local ok, err = pcall(function()
+        scanResult = SecurityScanner.scanInstance(target, deepScan)
+    end)
+
+    if not ok or not scanResult then
+        return {
+            status = "error",
+            error = "Gagal memindai target: " .. tostring(err)
+        }
+    end
+
+    local cleanedScripts = {}
+    if cleanThreats and #scanResult.threats > 0 then
+        -- Hapus skrip yang terdeteksi bahaya (HIGH severity)
+        local scriptsToDestroy = {}
+        for _, threat in ipairs(scanResult.threats) do
+            if threat.severity == "HIGH" and threat.scriptPath then
+                scriptsToDestroy[threat.scriptPath] = true
+            end
+        end
+
+        local function purge(instance: Instance)
+            for _, desc in ipairs(instance:GetDescendants()) do
+                if desc:IsA("LuaSourceContainer") and scriptsToDestroy[desc:GetFullName()] then
+                    table.insert(cleanedScripts, {
+                        name = desc.Name,
+                        className = desc.ClassName,
+                        path = desc:GetFullName(),
+                    })
+                    pcall(function() desc:Destroy() end)
+                end
+            end
+        end
+
+        purge(target)
+    end
+
+    return {
+        status = "success",
+        result = {
+            target = target:GetFullName(),
+            riskLevel = scanResult.riskLevel,
+            stats = scanResult.stats,
+            highThreatsCount = scanResult.highThreats,
+            mediumThreatsCount = scanResult.mediumThreats,
+            threats = scanResult.threats,
+            cleanedThreatsCount = #cleanedScripts,
+            cleanedScripts = cleanedScripts,
+            isCleaned = cleanThreats,
+        }
+    }
+end
+
 ]]></ProtectedString>
 			</Properties>
 		</Item>
@@ -1627,6 +2129,365 @@ end
 ]]></ProtectedString>
 			</Properties>
 		</Item>
+		<Item class="ModuleScript" referent="RBX_security_scanner">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">security_scanner</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ============================================================================
+-- Module: security_scanner
+-- Deskripsi: Engine Heuristik Pemindaian Keamanan & Backdoor Detection
+-- Standar: Business-Grade, Zero-Execution Isolation, Comprehensive Threat Rules
+-- ============================================================================
+
+local SecurityScanner = {}
+
+-- Daftar nama skrip yang sering digunakan oleh virus/backdoor klasik Roblox
+local SUSPICIOUS_SCRIPT_NAMES = {
+    "[Vv]accine",
+    "[Aa]nti[Ll]ag",
+    "[Ff]ix[Ll]ag",
+    "[Ii]nfection",
+    "[Ff]ire",
+    "[Cc]lean",
+    "[Vv]irus",
+    "4[Dd]",
+    "4[Dd]_[Pp]lugin",
+    "[Ss]pread",
+    "[Ll]ag[Ff]ixer",
+    "[Dd]up",
+}
+
+-- Aturan Pola Heuristik Kode Berbahaya
+local THREAT_PATTERNS = {
+    {
+        id = "BACKDOOR_REQUIRE",
+        pattern = "require%s*%(%s*%d+%s*%)",
+        severity = "HIGH",
+        name = "Backdoor Numeric Require",
+        description = "Memanggil modul eksternal pihak ketiga via Asset ID numerik (indikasi backdoor/remote loader).",
+    },
+    {
+        id = "LOADSTRING_EXEC",
+        pattern = "loadstring%s*%(",
+        severity = "HIGH",
+        name = "Dynamic Code Execution (loadstring)",
+        description = "Mengeksekusi string kode dinamis yang tidak dapat diaudit.",
+    },
+    {
+        id = "GETFENV_SETFENV",
+        pattern = "[gs]etfenv%s*%(",
+        severity = "HIGH",
+        name = "Environment Manipulation (getfenv/setfenv)",
+        description = "Memanipulasi environment global Luau untuk mengelabui analisis statis.",
+    },
+    {
+        id = "DISCORD_WEBHOOK",
+        pattern = "discord[a-z]*%.com/api/webhooks",
+        severity = "HIGH",
+        name = "Discord Webhook Exfiltration",
+        description = "Mencoba mengirimkan data game atau informasi pemain ke webhook eksternal Discord.",
+    },
+    {
+        id = "IP_LOGGER",
+        pattern = "webhook%.site|grabify%.link|iplogger|blasze",
+        severity = "HIGH",
+        name = "External IP/Data Logger",
+        description = "Menghubungi domain pencatat IP atau data capture pihak ketiga.",
+    },
+    {
+        id = "FORCED_PURCHASE",
+        pattern = "MarketplaceService%s*:%s*Prompt[A-Za-z]*Purchase",
+        severity = "MEDIUM",
+        name = "Forced Robux/Product Purchase",
+        description = "Memicu dialog pembelian paksa Gamepass atau Developer Product.",
+    },
+    {
+        id = "FORCED_TELEPORT",
+        pattern = "TeleportService%s*:%s*Teleport",
+        severity = "MEDIUM",
+        name = "Forced Game Teleportation",
+        description = "Memindahkan pemain secara paksa ke game/place lain.",
+    },
+    {
+        id = "CHAR_TABLE_OBFUSCATION",
+        pattern = "string%.char%s*%(%s*%d+%s*,%s*%d+%s*,%s*%d+",
+        severity = "HIGH",
+        name = "Obfuscated string.char Array",
+        description = "Menyusun kode rahasia tersembunyi menggunakan deretan kode karakter ASCII.",
+    },
+}
+
+-- Helper: Pengecekan nama script mencurigakan
+local function checkSuspiciousName(name: string): boolean
+    for _, pattern in ipairs(SUSPICIOUS_SCRIPT_NAMES) do
+        if string.find(name, pattern) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Helper: Deteksi obfuscation byte escape (\108\111\97\100) atau hex (\x6c\x6f)
+local function checkByteObfuscation(source: string): (boolean, string?)
+    local byteCount = 0
+    for _ in string.gmatch(source, "\\[0-9][0-9][0-9]") do
+        byteCount = byteCount + 1
+        if byteCount >= 4 then
+            return true, "Terdeteksi deretan escape byte ASCII (\\ddd) berulang."
+        end
+    end
+
+    local hexCount = 0
+    for _ in string.gmatch(source, "\\x[0-9a-fA-F][0-9a-fA-F]") do
+        hexCount = hexCount + 1
+        if hexCount >= 4 then
+            return true, "Terdeteksi deretan escape hex (\\xHH) berulang."
+        end
+    end
+
+    return false, nil
+end
+
+-- Helper: Deteksi kode yang sengaja disembunyikan dengan spasi/baris kosong berlebih
+local function checkOffscreenHiding(source: string): (boolean, string?)
+    -- Cek spasi horizontal masif (> 80 spasi berturut-turut)
+    if string.find(source, "   " .. string.rep(" ", 80)) then
+        return true, "Kode sengaja didorong ke kanan dengan lebih dari 80 spasi agar tersembunyi dari layar Studio."
+    end
+
+    -- Cek baris kosong masif di awal skrip (> 15 baris kosong)
+    local leadingNewlines = 0
+    for line in string.gmatch(source, "([^\r\n]*)\r?\n") do
+        if string.gsub(line, "%s+", "") == "" then
+            leadingNewlines = leadingNewlines + 1
+            if leadingNewlines >= 15 then
+                return true, "Terdapat lebih dari 15 baris kosong di awal skrip untuk menyembunyikan payload di baris bawah."
+            end
+        else
+            break
+        end
+    end
+
+    return false, nil
+end
+
+-- Analisis Source Code dari sebuah Script
+local function scanScriptSource(scriptInstance: Instance, source: string): { any }
+    local threats = {}
+    local lines = string.split(source, "\n")
+
+    -- 1. Scan pola heuristik baris per baris
+    for lineIdx, line in ipairs(lines) do
+        -- Skip baris komentar murni
+        local trimmed = string.match(line, "^%s*(.-)%s*$") or ""
+        if not string.sub(trimmed, 1, 2) == "--" then
+            for _, rule in ipairs(THREAT_PATTERNS) do
+                local s, e = string.find(line, rule.pattern)
+                if s then
+                    local snippet = string.sub(line, math.max(1, s - 30), math.min(#line, e + 30))
+                    table.insert(threats, {
+                        severity = rule.severity,
+                        ruleId = rule.id,
+                        name = rule.name,
+                        scriptName = scriptInstance.Name,
+                        scriptPath = scriptInstance:GetFullName(),
+                        scriptClass = scriptInstance.ClassName,
+                        line = lineIdx,
+                        snippet = string.match(snippet, "^%s*(.-)%s*$") or snippet,
+                        description = rule.description,
+                    })
+                end
+            end
+        end
+    end
+
+    -- 2. Cek Obfuscation
+    local isObf, obfReason = checkByteObfuscation(source)
+    if isObf then
+        table.insert(threats, {
+            severity = "HIGH",
+            ruleId = "BYTE_OBFUSCATION",
+            name = "Byte / Hex Obfuscation Payload",
+            scriptName = scriptInstance.Name,
+            scriptPath = scriptInstance:GetFullName(),
+            scriptClass = scriptInstance.ClassName,
+            line = 1,
+            snippet = string.sub(source, 1, 60) .. "...",
+            description = obfReason or "Payload kode disamarkan menggunakan escape bytes.",
+        })
+    end
+
+    -- 3. Cek Off-screen Code Hiding
+    local isHidden, hideReason = checkOffscreenHiding(source)
+    if isHidden then
+        table.insert(threats, {
+            severity = "HIGH",
+            ruleId = "OFFSCREEN_HIDING",
+            name = "Off-Screen Hidden Code",
+            scriptName = scriptInstance.Name,
+            scriptPath = scriptInstance:GetFullName(),
+            scriptClass = scriptInstance.ClassName,
+            line = 1,
+            snippet = "[Whitespace Padding Terdeteksi]",
+            description = hideReason or "Kode disembunyikan menggunakan whitespace ekstrem.",
+        })
+    end
+
+    return threats
+end
+
+-- ============================================================================
+-- PUBLIC API
+-- ============================================================================
+
+-- Memindai Instance secara rekursif
+function SecurityScanner.scanInstance(rootInstance: Instance, deepScan: boolean?)
+    local shouldDeepScan = (deepScan ~= false)
+    local allThreats = {}
+    local stats = {
+        totalInstances = 1,
+        models = 0,
+        parts = 0,
+        meshParts = 0,
+        textures = 0,
+        scripts = {
+            total = 0,
+            server = 0,
+            localScript = 0,
+            module = 0,
+        },
+    }
+
+    local function inspectItem(item: Instance)
+        stats.totalInstances = stats.totalInstances + 1
+
+        if item:IsA("Model") then
+            stats.models = stats.models + 1
+        elseif item:IsA("MeshPart") then
+            stats.meshParts = stats.meshParts + 1
+            stats.parts = stats.parts + 1
+        elseif item:IsA("BasePart") then
+            stats.parts = stats.parts + 1
+        elseif item:IsA("Texture") or item:IsA("Decal") or item:IsA("SurfaceAppearance") then
+            stats.textures = stats.textures + 1
+        end
+
+        if item:IsA("LuaSourceContainer") then
+            stats.scripts.total = stats.scripts.total + 1
+            if item:IsA("Script") then
+                stats.scripts.server = stats.scripts.server + 1
+            elseif item:IsA("LocalScript") then
+                stats.scripts.localScript = stats.scripts.localScript + 1
+            elseif item:IsA("ModuleScript") then
+                stats.scripts.module = stats.scripts.module + 1
+            end
+
+            -- Cek nama mencurigakan
+            if checkSuspiciousName(item.Name) then
+                table.insert(allThreats, {
+                    severity = "HIGH",
+                    ruleId = "SUSPICIOUS_SCRIPT_NAME",
+                    name = "Known Malicious Script Name Pattern",
+                    scriptName = item.Name,
+                    scriptPath = item:GetFullName(),
+                    scriptClass = item.ClassName,
+                    line = 0,
+                    snippet = item.Name,
+                    description = string.format("Nama skrip '%s' cocok dengan pola nama virus/backdoor klasik.", item.Name),
+                })
+            end
+
+            -- Deep scan isi source code
+            if shouldDeepScan then
+                local success, source = pcall(function()
+                    return (item :: any).Source
+                end)
+                if success and typeof(source) == "string" and #source > 0 then
+                    local scriptThreats = scanScriptSource(item, source)
+                    for _, t in ipairs(scriptThreats) do
+                        table.insert(allThreats, t)
+                    end
+                end
+            end
+        end
+    end
+
+    inspectItem(rootInstance)
+    for _, desc in ipairs(rootInstance:GetDescendants()) do
+        inspectItem(desc)
+    end
+
+    -- Hitung Level Risiko
+    local riskLevel = "SAFE"
+    local highCount = 0
+    local medCount = 0
+
+    for _, t in ipairs(allThreats) do
+        if t.severity == "HIGH" then
+            highCount = highCount + 1
+        elseif t.severity == "MEDIUM" then
+            medCount = medCount + 1
+        end
+    end
+
+    if highCount > 0 then
+        riskLevel = "DANGEROUS"
+    elseif medCount > 0 or stats.scripts.total > 0 then
+        riskLevel = "WARNING"
+    end
+
+    return {
+        riskLevel = riskLevel,
+        threats = allThreats,
+        stats = stats,
+        highThreats = highCount,
+        mediumThreats = medCount,
+    }
+end
+
+-- Menghapus seluruh skrip dari sebuah instance (Sanitasi Total)
+function SecurityScanner.stripScripts(rootInstance: Instance): { any }
+    local removed = {}
+
+    for _, desc in ipairs(rootInstance:GetDescendants()) do
+        if desc:IsA("LuaSourceContainer") then
+            table.insert(removed, {
+                name = desc.Name,
+                className = desc.ClassName,
+                path = desc:GetFullName(),
+            })
+            pcall(function()
+                desc:Destroy()
+            end)
+        end
+    end
+
+    if rootInstance:IsA("LuaSourceContainer") then
+        table.insert(removed, {
+            name = rootInstance.Name,
+            className = rootInstance.ClassName,
+            path = rootInstance:GetFullName(),
+        })
+        pcall(function()
+            rootInstance:Destroy()
+        end)
+    end
+
+    return removed
+end
+
+return SecurityScanner
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
 		<Item class="ModuleScript" referent="RBX_set_properties">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
@@ -1651,6 +2512,10 @@ end
             local currentVal = targetInstance[prop]
             if typeof(currentVal) == "Vector3" and type(val) == "table" and #val == 3 then
                 targetInstance[prop] = Vector3.new(val[1], val[2], val[3])
+            elseif typeof(currentVal) == "Vector2" and type(val) == "table" and #val >= 2 then
+                targetInstance[prop] = Vector2.new(val[1], val[2])
+            elseif typeof(currentVal) == "UDim" and type(val) == "table" and #val >= 2 then
+                targetInstance[prop] = UDim.new(val[1], val[2])
             elseif typeof(currentVal) == "Color3" and type(val) == "table" and #val == 3 then
                 local r, g, b = val[1], val[2], val[3]
                 if r > 1 or g > 1 or b > 1 then
@@ -1660,6 +2525,12 @@ end
                 end
             elseif typeof(currentVal) == "UDim2" and type(val) == "table" and #val == 4 then
                 targetInstance[prop] = UDim2.new(val[1], val[2], val[3], val[4])
+            elseif typeof(currentVal) == "NumberRange" and type(val) == "table" then
+                targetInstance[prop] = NumberRange.new(val[1], val[2] or val[1])
+            elseif typeof(currentVal) == "Rect" and type(val) == "table" and #val >= 4 then
+                targetInstance[prop] = Rect.new(val[1], val[2], val[3], val[4])
+            elseif typeof(currentVal) == "BrickColor" and type(val) == "string" then
+                targetInstance[prop] = BrickColor.new(val)
             elseif typeof(currentVal) == "CFrame" and type(val) == "table" then
                 targetInstance[prop] = CFrame.new(unpack(val))
             elseif typeof(currentVal) == "EnumItem" and type(val) == "string" then
@@ -1820,7 +2691,7 @@ function UIManager.init(pluginInstance, studioId)
 
     -- Version
     local versionLabel = Instance.new("TextLabel")
-    versionLabel.Text = "v2.2.0"
+    versionLabel.Text = "v2.3.0"
     versionLabel.Font = Enum.Font.Gotham
     versionLabel.TextSize = 11
     versionLabel.TextColor3 = Color3.fromRGB(120, 120, 130)

@@ -81,7 +81,15 @@ const antigravityConfigDir = path.join(homeDir, '.gemini', 'config');
 const antigravityMcpFile = path.join(antigravityConfigDir, 'mcp_config.json');
 
 if (fs.existsSync(antigravityConfigDir)) {
-    console.log('   -> Terdeteksi Antigravity IDE. Mendaftarkan MCP Server secara global...');
+    console.log('   -> Terdeteksi Antigravity IDE. Memasang AI Agent Skills & mendaftarkan MCP Server...');
+    const antigravityPluginDir = path.join(antigravityConfigDir, 'plugins', 'nvstudio-mcp');
+    const agentPluginSrc = path.join(installDir, 'agent-plugin');
+    if (fs.existsSync(agentPluginSrc)) {
+        if (!fs.existsSync(antigravityPluginDir)) fs.mkdirSync(antigravityPluginDir, { recursive: true });
+        fs.cpSync(agentPluginSrc, antigravityPluginDir, { recursive: true, force: true });
+        console.log('   ✅ AI Agent Skills & Rules terpasang ke Antigravity Plugins');
+    }
+
     let config = { mcpServers: {} };
     if (fs.existsSync(antigravityMcpFile)) {
         try {

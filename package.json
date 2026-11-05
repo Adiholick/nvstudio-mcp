@@ -1,6 +1,6 @@
 {
   "name": "@adiholick/nvstudio-mcp",
-  "version": "2.2.3",
+  "version": "2.3.0",
   "description": "Local Bridge Server MCP for Roblox Studio",
   "main": "dist/index.js",
   "bin": {
@@ -9,7 +9,8 @@
   "files": [
     "dist",
     "public",
-    "studio-plugin"
+    "studio-plugin",
+    "agent-plugin"
   ],
   "scripts": {
     "build": "tsc && npm run build:plugin",
@@ -29,7 +30,8 @@
     "express": "^5.2.1",
     "socket.io": "^4.8.3",
     "uuid": "^14.0.2",
-    "ws": "^8.22.0"
+    "ws": "^8.22.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

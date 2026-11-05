@@ -18,6 +18,7 @@ import { addTaskToQueue } from "./task-queue";
 import fs from 'fs';
 import path from 'path';
 import { validateLuauSyntax } from './luau-validator';
+import { getRobloxDocs } from './roblox-docs';
 
 const HISTORY_DIR = path.join(__dirname, '..', '.history');
 if (!fs.existsSync(HISTORY_DIR)) {
@@ -393,8 +394,63 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "preview_asset",
+    description: "Pratinjau hierarki dan pemindaian keamanan aset Creator Store secara terisolasi sebelum dimasukkan ke dalam game. Mendeteksi skrip backdoor, require eksternal numerik, obfuscation, webhook discord, dan virus script tanpa risiko mengeksekusi kode berbahaya.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        asset_id: {
+          type: "string",
+          description: "Roblox Asset ID angka (atau rbxassetid://) dari Creator Store.",
+        },
+        deep_scan: {
+          type: "boolean",
+          description: "Jika true (default), memindai dan menganalisis source code seluruh skrip di dalam model.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["asset_id"],
+    },
+  },
+  {
+    name: "scan_security",
+    description: "Audit keamanan instance atau model yang sudah ada di dalam game (Workspace, ServerScriptService, dll.) untuk mendeteksi skrip backdoor, virus, webhook discord, dan kode berbahaya.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path instance atau folder yang ingin diaudit (default: 'Workspace').",
+        },
+        deep_scan: {
+          type: "boolean",
+          description: "Jika true (default), memindai isi source code skrip.",
+        },
+        clean_threats: {
+          type: "boolean",
+          description: "Jika true, secara otomatis menghapus skrip berbahaya yang terdeteksi (default: false).",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+    },
+  },
+  {
     name: "insert_asset",
-    description: "Muat dan masukkan aset Roblox (Model/Package) berdasarkan Asset ID ke dalam Workspace atau target tertentu.",
+    description: "Muat dan masukkan aset Roblox (Model/Package) berdasarkan Asset ID ke dalam Workspace atau target tertentu dengan proteksi sanitasi skrip otomatis.",
     inputSchema: {
       type: "object",
       properties: {
@@ -405,6 +461,14 @@ const TOOLS: Tool[] = [
         target: {
           type: "string",
           description: "Parent tujuan tempat menempatkan model (default: 'Workspace').",
+        },
+        strip_scripts: {
+          type: "boolean",
+          description: "Jika true (default: true), secara otomatis menghapus semua skrip dari model sebelum dimasukkan ke game demi keamanan mutlak dari backdoor.",
+        },
+        scan_security: {
+          type: "boolean",
+          description: "Jika true (default: true), memindai potensi ancaman keamanan sebelum insert.",
         },
         placeId: {
           type: "number",
@@ -490,7 +554,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: "call_mcp_tool",
-    description: "Legacy tool dispatcher untuk kompatibilitas mundur. Mendukung semua command: execute_luau, get_children, get_full_tree, get_script_source, update_script_source, patch_script_source, rollback_script, get_properties, set_properties, create_instance, delete_instance, search_instance, generate_terrain, insert_asset, search_asset, script_grep, get_logs.",
+    description: "Legacy tool dispatcher untuk kompatibilitas mundur. Mendukung semua command: execute_luau, get_children, get_full_tree, get_script_source, update_script_source, patch_script_source, rollback_script, get_properties, set_properties, create_instance, delete_instance, search_instance, generate_terrain, insert_asset, preview_asset, scan_security, batch_create_instances, batch_set_properties, search_asset, script_grep, get_roblox_docs, get_logs.",
     inputSchema: {
       type: "object",
       properties: {
@@ -516,6 +580,80 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["command"],
+    },
+  },
+  {
+    name: "get_roblox_docs",
+    description: "Ambil dokumentasi resmi Roblox Engine API langsung dari Creator Docs (Classes, Services, Data types, Enums, dan Libraries). Mengembalikan format Markdown lengkap beserta signature fungsi, deskripsi parameter, properti, event, dan contoh kode untuk mencegah halusinasi kode Luau.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Nama Class, Service, Data type, Enum, atau Library Roblox (contoh: 'TweenService', 'CanvasGroup', 'Vector3', 'EasingStyle', 'task').",
+        },
+        member: {
+          type: "string",
+          description: "Opsional: Nama method, property, event, atau enum item spesifik untuk menghemat token (contoh: 'Create', 'GroupTransparency', 'Completed').",
+        },
+        category: {
+          type: "string",
+          enum: ["class", "datatype", "enum", "library", "auto"],
+          description: "Opsional: Kategori dokumentasi (default: 'auto').",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "batch_create_instances",
+    description: "Pembangun instance massal dan deklaratif dalam satu kali pemanggilan. Mendukung mode hierarki bersarang (tree) atau daftar array datar (instances) lengkap dengan penyetelan properti langsung (UDim, Vector2, UDim2, Color3, Enum, dll.) untuk menghemat token dan latensi jaringan.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path root tujuan tempat menaruh instance (contoh: 'StarterGui.MyScreen', 'Workspace.Map').",
+        },
+        tree: {
+          type: "object",
+          description: "Objek hierarki bersarang { className, name, properties, children: [...] } untuk membangun struktur pohon secara rekursif.",
+        },
+        instances: {
+          type: "array",
+          description: "Daftar array datar [{ className, name, parent, properties }] jika tidak menggunakan mode tree.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+    },
+  },
+  {
+    name: "batch_set_properties",
+    description: "Ubah properti pada banyak instance sekaligus dalam satu kali request atomik.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        updates: {
+          type: "array",
+          description: "Array objek pembaruan: [{ target: 'Path.To.Instance', properties: { PropName: value, ... } }].",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["updates"],
     },
   },
 ];
@@ -773,10 +911,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
 
+      case "preview_asset": {
+        const assetId = String(args.asset_id ?? "");
+        if (!assetId) throw new Error("Parameter 'asset_id' wajib diisi.");
+        const payload = JSON.stringify({
+          asset_id: assetId,
+          deep_scan: args.deep_scan !== false,
+        });
+        result = await dispatchTaskToStudio("preview_asset", "", payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "scan_security": {
+        const payload = JSON.stringify({
+          deep_scan: args.deep_scan !== false,
+          clean_threats: args.clean_threats === true,
+        });
+        result = await dispatchTaskToStudio("scan_security", args.target || "Workspace", payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
       case "insert_asset": {
         const assetId = String(args.asset_id ?? "");
         if (!assetId) throw new Error("Parameter 'asset_id' wajib diisi.");
-        result = await dispatchTaskToStudio("insert_asset", args.target || "Workspace", assetId, {
+        const payload = JSON.stringify({
+          asset_id: assetId,
+          strip_scripts: args.strip_scripts !== false,
+          scan_security: args.scan_security !== false,
+        });
+        result = await dispatchTaskToStudio("insert_asset", args.target || "Workspace", payload, {
           placeId: args.placeId,
           studioId: args.studioId,
         });
@@ -823,6 +992,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
 
+      case "get_roblox_docs": {
+        const query = String(args.query ?? "").trim();
+        if (!query) throw new Error("Parameter 'query' wajib diisi.");
+        const member = args.member ? String(args.member).trim() : undefined;
+        const category = args.category ? String(args.category).trim() : "auto";
+        result = await getRobloxDocs(query, member, category);
+        break;
+      }
+
+      case "batch_create_instances": {
+        const payload = JSON.stringify({
+          target: args.target,
+          tree: args.tree,
+          instances: args.instances,
+        });
+        result = await dispatchTaskToStudio("batch_create_instances", args.target || "Workspace", payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "batch_set_properties": {
+        if (!args.updates || !Array.isArray(args.updates)) throw new Error("Parameter 'updates' wajib berupa array.");
+        const payload = JSON.stringify({
+          updates: args.updates,
+        });
+        result = await dispatchTaskToStudio("batch_set_properties", "", payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
       case "call_mcp_tool": {
         const { command, target, data, placeId, studioId } = args as {
           command: string;
@@ -841,6 +1044,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             throw new Error(`Syntax error terdeteksi (Pre-commit check Node.js): ${validation.error} pada baris ${validation.line || 'unknown'}`);
           }
           if (target) backupScript(target, String(data));
+        }
+
+        // Intercept get_roblox_docs di Node.js
+        if (command === "get_roblox_docs") {
+          const queryParams = typeof data === "string" ? (function() { try { return JSON.parse(data); } catch { return { query: data }; } })() : (data || {});
+          const q = String(queryParams.query || target || "").trim();
+          result = await getRobloxDocs(q, queryParams.member, queryParams.category);
+          break;
         }
 
         // Intercept search_asset di Node.js

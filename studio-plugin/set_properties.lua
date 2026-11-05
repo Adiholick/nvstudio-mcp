@@ -12,6 +12,10 @@ return function(targetInstance, data, ctx, targetPath)
             local currentVal = targetInstance[prop]
             if typeof(currentVal) == "Vector3" and type(val) == "table" and #val == 3 then
                 targetInstance[prop] = Vector3.new(val[1], val[2], val[3])
+            elseif typeof(currentVal) == "Vector2" and type(val) == "table" and #val >= 2 then
+                targetInstance[prop] = Vector2.new(val[1], val[2])
+            elseif typeof(currentVal) == "UDim" and type(val) == "table" and #val >= 2 then
+                targetInstance[prop] = UDim.new(val[1], val[2])
             elseif typeof(currentVal) == "Color3" and type(val) == "table" and #val == 3 then
                 local r, g, b = val[1], val[2], val[3]
                 if r > 1 or g > 1 or b > 1 then
@@ -21,6 +25,12 @@ return function(targetInstance, data, ctx, targetPath)
                 end
             elseif typeof(currentVal) == "UDim2" and type(val) == "table" and #val == 4 then
                 targetInstance[prop] = UDim2.new(val[1], val[2], val[3], val[4])
+            elseif typeof(currentVal) == "NumberRange" and type(val) == "table" then
+                targetInstance[prop] = NumberRange.new(val[1], val[2] or val[1])
+            elseif typeof(currentVal) == "Rect" and type(val) == "table" and #val >= 4 then
+                targetInstance[prop] = Rect.new(val[1], val[2], val[3], val[4])
+            elseif typeof(currentVal) == "BrickColor" and type(val) == "string" then
+                targetInstance[prop] = BrickColor.new(val)
             elseif typeof(currentVal) == "CFrame" and type(val) == "table" then
                 targetInstance[prop] = CFrame.new(unpack(val))
             elseif typeof(currentVal) == "EnumItem" and type(val) == "string" then

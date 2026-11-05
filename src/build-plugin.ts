@@ -130,6 +130,68 @@ function copyToRobloxPlugins() {
             console.log(`[Build] ✅ Berhasil memperbarui ${homeClonePlugin}`);
         } catch {}
     }
+
+    // Auto-sync dist, package.json, and agent-plugin to ~/.nvstudio-mcp & Antigravity
+    syncRuntimeAndPlugins();
+}
+
+function syncRuntimeAndPlugins() {
+    const homeDir = os.homedir();
+    const nvRuntimeDir = path.join(homeDir, '.nvstudio-mcp');
+    const antigravityPluginDir = path.join(homeDir, '.gemini', 'config', 'plugins', 'nvstudio-mcp');
+
+    // Sync to ~/.nvstudio-mcp
+    if (fs.existsSync(nvRuntimeDir)) {
+        try {
+            const rootDir = process.cwd();
+            const distSrc = path.join(rootDir, 'dist');
+            const distDest = path.join(nvRuntimeDir, 'dist');
+            if (fs.existsSync(distSrc)) {
+                fs.cpSync(distSrc, distDest, { recursive: true, force: true });
+            }
+
+            const pkgSrc = path.join(rootDir, 'package.json');
+            const pkgDest = path.join(nvRuntimeDir, 'package.json');
+            if (fs.existsSync(pkgSrc)) {
+                fs.copyFileSync(pkgSrc, pkgDest);
+            }
+
+            const pluginSrc = path.join(rootDir, 'studio-plugin');
+            const pluginDest = path.join(nvRuntimeDir, 'studio-plugin');
+            if (fs.existsSync(pluginSrc)) {
+                fs.cpSync(pluginSrc, pluginDest, { recursive: true, force: true });
+            }
+
+            const srcSrc = path.join(rootDir, 'src');
+            const srcDest = path.join(nvRuntimeDir, 'src');
+            if (fs.existsSync(srcSrc)) {
+                fs.cpSync(srcSrc, srcDest, { recursive: true, force: true });
+            }
+
+            const publicSrc = path.join(rootDir, 'public');
+            const publicDest = path.join(nvRuntimeDir, 'public');
+            if (fs.existsSync(publicSrc)) {
+                fs.cpSync(publicSrc, publicDest, { recursive: true, force: true });
+            }
+
+            console.log(`[Build] ✅ Berhasil menyinkronkan runtime ${nvRuntimeDir} (dist, public, studio-plugin, src)`);
+        } catch (err: any) {
+            console.warn(`[Build] Gagal menyinkronkan ke ~/.nvstudio-mcp: ${err.message}`);
+        }
+    }
+
+    // Sync to ~/.gemini/config/plugins/nvstudio-mcp
+    if (fs.existsSync(antigravityPluginDir)) {
+        try {
+            const agentPluginSrc = path.join(process.cwd(), 'agent-plugin');
+            if (fs.existsSync(agentPluginSrc)) {
+                fs.cpSync(agentPluginSrc, antigravityPluginDir, { recursive: true, force: true });
+                console.log(`[Build] ✅ Berhasil menyinkronkan agent-plugin ke ${antigravityPluginDir}`);
+            }
+        } catch (err: any) {
+            console.warn(`[Build] Gagal menyinkronkan ke agent-plugin Antigravity: ${err.message}`);
+        }
+    }
 }
 
 buildRbxmx();

@@ -1,8 +1,29 @@
 # nvstudio-mcp 🚀
 
-**nvstudio-mcp** adalah jembatan pintar (*Model Context Protocol Bridge*) yang menghubungkan Asisten AI Anda (seperti Antigravity IDE, Cursor, Claude Desktop, atau Windsurf) secara langsung ke dalam **Roblox Studio**. Dengan plugin ini, AI Anda dapat membaca, mengedit script, men-generate terrain, dan berinteraksi dengan API Roblox Studio layaknya seorang asisten *Co-Pilot* sejati.
+**nvstudio-mcp** adalah jembatan pintar (*Model Context Protocol Bridge*) yang menghubungkan Asisten AI Anda (seperti Antigravity IDE, Cursor, Claude Desktop, atau Windsurf) secara langsung ke dalam **Roblox Studio**. Dengan plugin ini, AI Anda dapat membaca dan mengedit skrip, membangun hierarki GUI massal, memindai keamanan model 3D, mencari dokumentasi engine resmi, men-generate terrain, dan berinteraksi dengan API Roblox Studio layaknya seorang asisten *Co-Pilot* sejati.
 
 Sistem ini didesain menggunakan **Hybrid Architecture** yang memisahkan logika Engine (*Studio Plugin*) dan aturan anti-halusinasi (*Agent Plugin*).
+
+---
+
+## 🌟 Fitur Unggulan v2.3
+
+- ⚡ **Batch Instance Builder (`batch_create_instances`, `batch_set_properties`)**:
+  - Membangun hierarki objek/UI bersarang puluhan tingkat secara instan dalam 1 putaran request (mengeliminasi 10–20 latency roundtrips).
+  - Pembaruan properti massal secara atomik dengan dukungan penuh tipe data Roblox (`UDim`, `UDim2`, `Vector2`, `Vector3`, `NumberRange`, `Rect`, dll).
+- 🛡️ **Asset Security Scanner (`preview_asset`, `scan_security`, safe `insert_asset`)**:
+  - Audit 10 jenis ancaman berbahaya (backdoor `require`, bytecode/hex obfuscation, `loadstring`, Discord webhook loggers, IP stealer, fake gamepass prompt, off-screen hidden padding).
+  - Pratinjau aset terisolasi sebelum dimasukkan ke game dan auto-sanitasi skrip (`strip_scripts = true` secara default).
+- 📚 **Live Roblox Engine API & Docs Lookup (`get_roblox_docs`)**:
+  - Mengambil dokumentasi resmi terverifikasi langsung dari Roblox Creator Docs (Class, Datatype, Enum, Library, dan Service).
+  - Dilengkapi filter nama member spesifik dan caching disk lokal super cepat (~2 ms) untuk mencegah halusinasi kode Luau.
+- 🎨 **Standarisasi Desain GUI & Smart Responsive Scaling**:
+  - Panduan baku UI modern (*Dark Modern Theme* #1C1C1E, #191919, aksen Cyan #00AAFF).
+  - Deteksi perangkat responsif pintar (`GetDeviceType` memisahkan PC, Phone, Tablet, dan Console secara terisolasi).
+- 🔄 **Real-Time Polling Stream & Visual Dashboard**:
+  - Komunikasi sub-detik yang sangat stabil dan bebas latensi. Buka [http://localhost:3055](http://localhost:3055) di browser Anda untuk memantau antrean perintah, status koneksi Studio, dan log eksekusi.
+- 🧹 **Anti-Zombie Port & Auto-Connect**:
+  - Port `3055` dibersihkan secara otomatis jika terjadi force-close, dan plugin Studio otomatis terhubung tanpa perlu menekan tombol manual.
 
 ---
 
@@ -32,8 +53,8 @@ curl -fsSL https://raw.githubusercontent.com/Adiholick/nvstudio-mcp/main/install
 **Apa saja yang dilakukan installer ini secara otomatis?**
 1. 📦 Mengunduh source code, memasang dependensi Node.js, dan mengkompilasi TypeScript (*Bridge Server*).
 2. 🧩 **Memasang Plugin Roblox Studio (`nvstudio_mcp.rbxmx`) otomatis** ke folder sistem Roblox Studio Anda (`%LOCALAPPDATA%\Roblox\Plugins` di Windows atau `~/Documents/ROBLOX/Plugins` di macOS).
-3. 🧠 **Universal AI Skill Installer**: Secara cerdas memindai dan mengunduh library skill 29+ *roblox-brain* dan *nvstudio-mcp-guide*, lalu menginjeksinya langsung ke dalam struktur `skills/` dari **AI Agent apapun** yang Anda gunakan (mendukung **Antigravity IDE**, **Cursor**, **Claude Code**, **Codex**, **OpenCode**, dan **Roo Code**).
-4. ⚙️ Melakukan auto-konfigurasi jika mendeteksi editor **Cursor** (`.cursor/mcp.json`) atau **Antigravity** (`mcp_config.json`).
+3. 🧠 **Universal AI Skill Installer**: Menginjeksi skill pemandu (*nvstudio-mcp-guide*, *nvstudio-gui-standards*, *nvstudio-assets-terrain-guide*, *nvstudio-roblox-sync-guide*) dan aturan anti-halusinasi langsung ke struktur editor AI Anda (**Antigravity IDE**, **Cursor**, **Claude Code**, **Codex**, **OpenCode**, dan **Windsurf**).
+4. ⚙️ Melakukan auto-konfigurasi registrasi MCP server pada editor yang terdeteksi.
 
 ---
 
@@ -43,18 +64,18 @@ Karena pembatasan keamanan bawaan Roblox Studio, akses HTTP harus diizinkan seka
 1. Buka game/place Anda di **Roblox Studio**.
 2. Di toolbar atas, buka tab **Home** ➔ **Game Settings** ➔ pilih menu **Security**.
 3. Centang (aktifkan) **`Allow HTTP Requests`**, lalu klik **Save**.
-4. **Auto-Detect Aktif!** Plugin Roblox Studio kini memiliki heartbeat pintar yang akan otomatis terhubung (*Auto-Connect*) segera setelah MCP server aktif — Anda tidak perlu lagi repot menekan tombol connect secara manual.
+4. **Auto-Detect Aktif!** Plugin Roblox Studio akan otomatis terhubung (*Connected*) segera setelah server bridge aktif.
 
 ---
 
 ### 📂 Alternatif: Instalasi Plugin Secara Manual (Opsional)
 
 Jika Anda **tidak** menggunakan skrip installer otomatis di atas (misalnya hanya menambahkan server via `npx` di klien AI), pasang file plugin Roblox Studio secara manual:
-1. Ambil file `nvstudio_mcp.rbxmx` dari folder [studio-plugin/nvstudio_mcp.rbxmx](file:///studio-plugin/nvstudio_mcp.rbxmx).
+1. Ambil file `nvstudio_mcp.rbxmx` dari folder `studio-plugin/nvstudio_mcp.rbxmx`.
 2. Pindahkan/salin file tersebut ke direktori plugin Roblox di komputer Anda:
-   - **Windows:** `%LOCALAPPDATA%\Roblox\Plugins` (atau `C:\Users\<Username>\AppData\Local\Roblox\Plugins`)
+   - **Windows:** `%LOCALAPPDATA%\Roblox\Plugins`
    - **macOS:** `~/Documents/ROBLOX/Plugins`
-3. Restart atau buka kembali Roblox Studio. Plugin akan muncul di tab **Plugins**.
+3. Buka atau buka kembali Roblox Studio. Plugin akan muncul di tab **Plugins**.
 
 ---
 
@@ -75,7 +96,6 @@ Tambahkan konfigurasi berikut ke file `mcp.json` Anda:
   }
 }
 ```
-*(AI Anda akan selalu menjalankan versi terbaru dari server Bridge langsung dari NPM!)*
 
 ### Klien Berbasis Instalasi Lokal (Antigravity IDE)
 Jika Anda menggunakan instalasi lokal via installer di `%USERPROFILE%\.nvstudio-mcp`, tambahkan ke `~/.gemini/config/mcp_config.json`:
@@ -94,46 +114,22 @@ Jika Anda menggunakan instalasi lokal via installer di `%USERPROFILE%\.nvstudio-
 
 ---
 
-## 🖥️ Dashboard Visual & Fitur Unggulan v2.1
-
-- **High-Performance Polling Stream & SSE:** Komunikasi antara Roblox Studio dan Bridge Server menggunakan arsitektur snapshot stream sub-detik yang sangat responsif, stabil, dan bebas latensi.
-- **Clean Log Engine:** Log status pada Roblox Studio hanya diperbarui saat ada perubahan status koneksi sebenarnya (bebas dari log spam berulang).
-- **Visual Dashboard Real-time:** Buka [http://localhost:3055](http://localhost:3055) di browser Anda untuk melihat monitor antrean perintah, log aktivitas AI, status koneksi Studio, dan statistik eksekusi secara visual.
-- **Auto-Detect & Auto-Connect:** Plugin Roblox Studio otomatis menyambung ke server saat aktif dan kembali menunggu (*Waiting*) saat server mati tanpa perlu campur tangan manual.
-- **Anti-Zombie Port Handling:** Port `3055` dibersihkan secara otomatis jika terjadi penutupan atau restart IDE secara paksa.
-
----
-
 ## 🗑️ Cara Uninstall (Mencopot Pemasangan)
 
-Jika Anda ingin berhenti menggunakan `nvstudio-mcp`, Anda dapat membersihkannya dari sistem Anda secara menyeluruh dengan 4 langkah berikut:
+Jika Anda ingin membersihkan `nvstudio-mcp` dari sistem Anda secara menyeluruh:
 
-### 1. Hapus Plugin dari Roblox Studio
-Hapus file plugin dari folder lokal Roblox Anda.
-- **Windows:** Buka folder `%LOCALAPPDATA%\Roblox\Plugins` (atau `AppData\Local\Roblox\Plugins`) dan hapus file `nvstudio_mcp.rbxmx` (atau `nvstudio_mcp.rbxm`).
-- **macOS:** Buka folder `~/Documents/ROBLOX/Plugins` dan hapus file `nvstudio_mcp.rbxmx` (atau `nvstudio_mcp.rbxm`).
-
-### 2. Hapus Agen dari Antigravity (Jika Menggunakan AGY)
-Hapus *bundle* keterampilan *anti-halusinasi* dari memori AI Anda:
-```bash
-rm -rf ~/.gemini/config/plugins/nvstudio-mcp
-```
-*(Untuk pengguna Windows PowerShell, Anda bisa menghapus folder `C:\Users\NamaAnda\.gemini\config\plugins\nvstudio-mcp` secara manual).*
-
-### 3. Hapus File Instalasi Node.js
-Installer `install.sh` sebelumnya mengkloning repositori dan menginstal Node.js di dalam direktori *Home* Anda (secara bawaan di `~/.nvstudio-mcp`). Hapus direktori tersebut:
-```bash
-rm -rf ~/.nvstudio-mcp
-```
-
-### 4. Hapus Konfigurasi dan Skills dari Editor AI Anda
-Jika Anda memasukkan konfigurasi MCP secara otomatis ke Cursor atau secara manual ke Claude Desktop, buka file pengaturan `mcp.json` tersebut dan **hapus blok `"nvstudio-mcp"`** dari dalam objek `mcpServers`.
-
-**Untuk membersihkan skill bawaan (Universal Skill Installer):**
-Anda bisa menghapus manual symlink/folder shortcut (yang bernama awalan `roblox-`) dari dalam folder konfigurasi agen Anda:
-- **Cursor / Workspace Lokal**: Hapus isi `.cursor/skills` dan `.cursor/roblox-brain.md`
-- **Claude Code**: Hapus dari `~/.claude/skills`
-- **Codex / OpenCode**: Hapus dari direktori lokal atau global (`~/.codex/skills`, `~/.opencode/skills`).
+1. **Hapus Plugin dari Roblox Studio:**
+   - Hapus file `nvstudio_mcp.rbxmx` dari `%LOCALAPPDATA%\Roblox\Plugins` (Windows) atau `~/Documents/ROBLOX/Plugins` (macOS).
+2. **Hapus AI Plugin Antigravity:**
+   ```bash
+   rm -rf ~/.gemini/config/plugins/nvstudio-mcp
+   ```
+3. **Hapus Direktori Instalasi Node.js:**
+   ```bash
+   rm -rf ~/.nvstudio-mcp
+   ```
+4. **Hapus Konfigurasi MCP:**
+   Hapus blok `"nvstudio-mcp"` dari file konfigurasi `mcp.json` editor AI Anda.
 
 ---
 

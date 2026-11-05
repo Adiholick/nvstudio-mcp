@@ -16,6 +16,7 @@ import {
     cancelTaskDeadline,
     getWsPeersDetails,
 } from './ws-gateway';
+import { getRobloxDocs } from './roblox-docs';
 
 const { version: SERVER_VERSION } = require('../package.json');
 
@@ -385,7 +386,17 @@ function addLog(io: Server, type: ActivityLog['type'], message: string) {
     if (activityLogs.length > 200) activityLogs.pop();
     if (io.engine && io.engine.clientsCount > 0) {
         io.emit('log', log);
-        io.emit('stats', { totalTasks, successCount, errorCount, sessionStart });
+        io.emit('stats', { 
+            totalTasks, 
+            successCount, 
+            errorCount, 
+            sessionStart,
+            studioConnected: isStudioConnected(),
+            studioCount: getConnectedStudioCount(),
+            wsStudios: getWsPeerCount(),
+            connectedStudios: getConnectedStudios(),
+            version: SERVER_VERSION
+        });
     }
 }
 
@@ -458,7 +469,12 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
         onStudioStatusChange: () => {
             const connected = isStudioConnected();
             const studioCount = getConnectedStudioCount();
-            io.emit('studio-status', { connected, studioCount });
+            io.emit('studio-status', { 
+                connected, 
+                studioCount, 
+                connectedStudios: getConnectedStudios(),
+                version: SERVER_VERSION 
+            });
             broadcastStatus();
             if (!connected && hasPendingTasks()) {
                 checkPendingTasksOnStudioDisconnect();
@@ -501,9 +517,27 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
                 studioConnected: isStudioConnected(), 
                 studioCount: getConnectedStudioCount(),
                 wsStudios: getWsPeerCount(),
-                port 
+                port,
+                version: SERVER_VERSION,
+                connectedStudios: getConnectedStudios(),
             },
         });
+    });
+
+    // ── /api/docs (Endpoint pencarian dokumentasi engine untuk web dashboard) ──
+    app.get('/api/docs', async (req, res) => {
+        try {
+            const query = String(req.query.query || '').trim();
+            const member = req.query.member ? String(req.query.member).trim() : undefined;
+            const category = req.query.category ? String(req.query.category).trim() : 'auto';
+            if (!query) {
+                return res.status(400).json({ error: "Parameter 'query' wajib diisi." });
+            }
+            const result = await getRobloxDocs(query, member, category);
+            res.json({ success: true, result });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
     });
 
     // ── /api/stats ─────────────────────────────────────────────────────────────
@@ -555,7 +589,13 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
         // Daftarkan studio jika belum ada
         if (!studioEventQueues.has(studioId)) {
             studioEventQueues.set(studioId, []);
-            io.emit('studio-status', { connected: true, studioCount: Math.max(studioEventQueues.size, 1), studioId });
+            io.emit('studio-status', { 
+                connected: true, 
+                studioCount: Math.max(studioEventQueues.size, 1), 
+                studioId,
+                connectedStudios: getConnectedStudios(),
+                version: SERVER_VERSION
+            });
             addLog(io, 'system', `Studio terdaftar. (ID: ${studioId.substring(0, 8)}…, Place: ${placeId ?? 'Local'}, Total: ${studioEventQueues.size})`);
 
             if (!isDaemon && !dashboardOpened) {

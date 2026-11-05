@@ -95,7 +95,7 @@ function UIManager.init(pluginInstance, studioId)
 
     -- Version
     local versionLabel = Instance.new("TextLabel")
-    versionLabel.Text = "v2.2.0"
+    versionLabel.Text = "v2.3.0"
     versionLabel.Font = Enum.Font.Gotham
     versionLabel.TextSize = 11
     versionLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
