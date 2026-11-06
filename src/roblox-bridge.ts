@@ -17,6 +17,7 @@ import {
     getWsPeersDetails,
 } from './ws-gateway';
 import { getRobloxDocs } from './roblox-docs';
+import { getVfxDatabase } from './vfx-database';
 
 const { version: SERVER_VERSION } = require('../package.json');
 
@@ -535,6 +536,109 @@ export function startBridgeServer(port: number, isDaemon: boolean = false) {
             }
             const result = await getRobloxDocs(query, member, category);
             res.json({ success: true, result });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── /api/vfx Endpoints (NV-VFX Database Management) ───────────────────────
+    app.get('/api/vfx', (req, res) => {
+        try {
+            const db = getVfxDatabase();
+            const category = req.query.category ? String(req.query.category) : undefined;
+            const query = req.query.query ? String(req.query.query) : undefined;
+            const items = db.listVfx({ category, query });
+            res.json({ success: true, count: items.length, items });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    app.get('/api/vfx/categories', (req, res) => {
+        try {
+            const db = getVfxDatabase();
+            res.json({ success: true, categories: db.getCategories() });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    app.get('/api/vfx/:id', (req, res) => {
+        try {
+            const db = getVfxDatabase();
+            const item = db.getVfx(req.params.id);
+            if (!item) return res.status(404).json({ error: 'VFX tidak ditemukan' });
+            res.json({ success: true, item });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    app.post('/api/vfx', (req, res) => {
+        try {
+            const db = getVfxDatabase();
+            const saved = db.saveVfx(req.body);
+            io.emit('vfx_updated', { action: 'saved', item: saved });
+            res.json({ success: true, item: saved });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    app.delete('/api/vfx/:id', (req, res) => {
+        try {
+            const db = getVfxDatabase();
+            const ok = db.deleteVfx(req.params.id);
+            if (ok) {
+                io.emit('vfx_updated', { action: 'deleted', id: req.params.id });
+                res.json({ success: true });
+            } else {
+                res.status(404).json({ error: 'VFX tidak ditemukan' });
+            }
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    app.post('/api/vfx/apply', async (req, res) => {
+        try {
+            const { id, target, scale, enabled, placeId, studioId } = req.body;
+            const db = getVfxDatabase();
+            const item = db.getVfx(id);
+            if (!item) return res.status(404).json({ error: 'VFX tidak ditemukan di database' });
+            const targetPath = target || 'Workspace';
+            const payload = JSON.stringify({ data: item.data, scale: scale || 1, enabled });
+            const result = await addTaskToQueue('apply_vfx', targetPath, payload, { placeId, studioId });
+            res.json({ success: true, result });
+        } catch (err: any) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    app.post('/api/vfx/scan', async (req, res) => {
+        try {
+            const { target, name, category, tags, placeId, studioId } = req.body;
+            const targetPath = target || 'Workspace';
+            const scanPayload = JSON.stringify({ name, category, tags });
+            const result = await addTaskToQueue('scan_vfx', targetPath, scanPayload, { placeId, studioId });
+            if (result && (result.status === 'success' || !result.error)) {
+                const scanned = result.result || result;
+                const db = getVfxDatabase();
+                const saved = db.saveVfx({
+                    name: scanned.name || name || 'Scanned_VFX',
+                    category: scanned.category || category || 'Ambient',
+                    tags: scanned.tags || tags || [],
+                    description: scanned.description,
+                    sourcePlaceId: placeId,
+                    stats: scanned.stats,
+                    nodeCount: scanned.nodeCount,
+                    data: scanned.data,
+                });
+                io.emit('vfx_updated', { action: 'saved', item: saved });
+                res.json({ success: true, item: saved, rawResult: result });
+            } else {
+                res.status(400).json({ error: result?.error || 'Gagal memindai VFX dari Studio' });
+            }
         } catch (err: any) {
             res.status(500).json({ error: err.message });
         }

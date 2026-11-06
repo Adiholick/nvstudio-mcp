@@ -10,6 +10,127 @@
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
+		<Item class="ModuleScript" referent="RBX_animate_character">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">animate_character</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- Skill Module: animate_character
+-- Deskripsi: Semantic Tool untuk AI Agent membuat animasi karakter halus
+-- Menggunakan NV-Animation Engine (Walk, Slash, Punch, Idle, atau Custom)
+-- ══════════════════════════════════════════════════════════════════════
+
+local HttpService = game:GetService("HttpService")
+local dispatcherMod = script.Parent:WaitForChild("nv_anim_dispatcher")
+local Dispatcher = require(dispatcherMod)
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+	if not targetInstance then
+		return { status = "error", error = "Target karakter rig untuk animate_character tidak ditemukan: " .. tostring(targetPath) }
+	end
+
+	local payload: { [string]: any } = {}
+	local ok, err = pcall(function()
+		if type(data) == "table" then
+			payload = data
+		else
+			payload = HttpService:JSONDecode(tostring(data))
+		end
+	end)
+
+	if not ok or type(payload) ~= "table" then
+		return { status = "error", error = "Format payload animasi tidak valid: " .. tostring(err) }
+	end
+
+	local action = tostring(payload.action or "walk_cycle")
+	local parameters = payload.parameters or {}
+	local keyPoses = payload.key_poses
+
+	return Dispatcher.createAnimation(targetInstance, action, parameters, keyPoses)
+end
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_apply_vfx">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">apply_vfx</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- Skill Module: apply_vfx
+-- Deskripsi: Menerapkan tabel data VFX murni ke instance target di Studio
+-- ══════════════════════════════════════════════════════════════════════
+
+local HttpService = game:GetService("HttpService")
+local serializerMod = script.Parent:WaitForChild("nv_vfx_serializer")
+local Serializer = require(serializerMod)
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+	if not targetInstance then
+		return { status = "error", error = "Target instance untuk apply_vfx tidak ditemukan: " .. tostring(targetPath) }
+	end
+
+	local payload = {}
+	local ok, err = pcall(function()
+		if type(data) == "table" then
+			payload = data
+		else
+			payload = HttpService:JSONDecode(tostring(data))
+		end
+	end)
+
+	if not ok or type(payload) ~= "table" then
+		return { status = "error", error = "Format payload VFX tidak valid: " .. tostring(err) }
+	end
+
+	-- Extract treeData (bisa di payload.data atau langsung di payload)
+	local treeData = payload.data or payload
+	if not treeData.nodes then
+		return { status = "error", error = "Payload tidak memiliki struktur 'nodes' yang valid untuk deserialisasi." }
+	end
+
+	local scale = tonumber(payload.scale) or 1
+	local enabled = payload.enabled
+
+	local desResult = Serializer.deserialize(treeData, targetInstance, {
+		scale = scale,
+		enabled = enabled
+	})
+
+	if desResult.status == "error" then
+		return {
+			status = "error",
+			error = "Gagal merekonstruksi VFX: " .. table.concat(desResult.errors or {}, "; ")
+		}
+	end
+
+	return {
+		status = "success",
+		result = {
+			message = string.format("Berhasil menerapkan VFX '%s' (%d node) ke '%s'", tostring(treeData.rootName or "VFX"), desResult.createdCount, targetInstance:GetFullName()),
+			createdCount = desResult.createdCount,
+			errors = desResult.errors
+		}
+	}
+end
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
 		<Item class="ModuleScript" referent="RBX_batch_create_instances">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
@@ -330,6 +451,54 @@ end
         return { status = "error", error = "Gagal menghapus instance: " .. tostring(err) }
     end
 end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_edit_rig">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">edit_rig</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- Skill Module: edit_rig
+-- Deskripsi: Semantic Tool untuk AI Agent mengelola rig, Motor6D, Weld,
+-- C0/C1 pivot compensation, auto-rigging, dan pengelasan model.
+-- ══════════════════════════════════════════════════════════════════════
+
+local HttpService = game:GetService("HttpService")
+local dispatcherMod = script.Parent:WaitForChild("nv_rig_dispatcher")
+local Dispatcher = require(dispatcherMod)
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+	if not targetInstance then
+		return { status = "error", error = "Target instance untuk edit_rig tidak ditemukan: " .. tostring(targetPath) }
+	end
+
+	local payload: { [string]: any } = {}
+	local ok, err = pcall(function()
+		if type(data) == "table" then
+			payload = data
+		else
+			payload = HttpService:JSONDecode(tostring(data))
+		end
+	end)
+
+	if not ok or type(payload) ~= "table" then
+		return { status = "error", error = "Format payload edit_rig tidak valid: " .. tostring(err) }
+	end
+
+	local action = tostring(payload.action or "inspect")
+	local parameters = payload.parameters or payload
+
+	return Dispatcher.dispatch(targetInstance, action, parameters)
+end
+
 ]]></ProtectedString>
 			</Properties>
 		</Item>
@@ -1616,6 +1785,2348 @@ end)
 ]]></ProtectedString>
 			</Properties>
 		</Item>
+		<Item class="ModuleScript" referent="RBX_nv_anim_dispatcher">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">nv_anim_dispatcher</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- NVStudio Subsystem: nv_anim_dispatcher
+-- Deskripsi: Headless Modular Command Dispatcher untuk Pembuatan Animasi
+-- Mengatur inisialisasi rig, analytical IK, generasi keyframe kurva halus,
+-- dan ekspor resmi ke KeyframeSequence di Roblox Studio.
+-- ══════════════════════════════════════════════════════════════════════
+
+local kinematicsMod = script.Parent:WaitForChild("nv_kinematics")
+local Kinematics = require(kinematicsMod)
+local curvesMod = script.Parent:WaitForChild("nv_curves")
+local Curves = require(curvesMod)
+local motionMod = script.Parent:WaitForChild("nv_motion_generator")
+local Motion = require(motionMod)
+
+local Dispatcher = {}
+
+-- ── 1. Helper: Temukan Rig dari Instance atau Path ────────────────────────────
+function Dispatcher.getRigInfo(targetInstance: Instance?): Kinematics.RigInfo?
+	if not targetInstance then return nil end
+	local model = targetInstance:IsA("Model") and targetInstance or targetInstance:FindFirstAncestorOfClass("Model")
+	if not model then return nil end
+	return Kinematics.inspectRig(model)
+end
+
+-- ── 2. Buat KeyframeSequence Resmi di Roblox ─────────────────────────────────
+function Dispatcher.buildKeyframeSequence(
+	rigInfo: Kinematics.RigInfo,
+	clipName: string,
+	keyframes: { Motion.KeyframeData },
+	options: { loop: boolean?, priority: Enum.AnimationPriority? }?
+): KeyframeSequence
+	local opts = options or {}
+	local isR15 = rigInfo.isR15
+
+	local seq = Instance.new("KeyframeSequence")
+	seq.Name = clipName
+	seq.Loop = opts.loop ~= false
+	seq.Priority = opts.priority or Enum.AnimationPriority.Action
+
+	-- Urutkan keyframes berdasarkan waktu
+	table.sort(keyframes, function(a, b) return a.time < b.time end)
+
+	for _, kfData in ipairs(keyframes) do
+		local kf = Instance.new("Keyframe")
+		kf.Time = kfData.time
+		kf.Name = string.format("Frame_%.2f", kfData.time)
+
+		-- Root Pose (HumanoidRootPart)
+		local rootPose = Instance.new("Pose")
+		rootPose.Name = "HumanoidRootPart"
+		rootPose.Weight = 1
+		rootPose.EasingStyle = Enum.PoseEasingStyle.Cubic
+		rootPose.EasingDirection = Enum.PoseEasingDirection.InOut
+
+		local function createPose(name: string, cf: CFrame?, parent: Instance?): Pose
+			local p = Instance.new("Pose")
+			p.Name = name
+			p.Weight = 1
+			p.EasingStyle = Enum.PoseEasingStyle.Cubic
+			p.EasingDirection = Enum.PoseEasingDirection.InOut
+			if cf then p.CFrame = cf end
+			if parent then p.Parent = parent end
+			return p
+		end
+
+		if isR15 then
+			-- LowerTorso pose
+			local lowerTorsoPose = createPose("LowerTorso", kfData.poses["Root"], nil)
+
+			-- UpperTorso pose
+			local upperTorsoPose = createPose("UpperTorso", kfData.poses["Waist"], nil)
+
+			-- Head
+			if kfData.poses["Neck"] then
+				createPose("Head", kfData.poses["Neck"], upperTorsoPose)
+			end
+
+			-- Arms
+			for _, side in ipairs({ "Left", "Right" }) do
+				local shoulderPose = createPose(side .. "UpperArm", kfData.poses[side .. "Shoulder"], nil)
+				local elbowPose = shoulderPose
+				if kfData.poses[side .. "Elbow"] then
+					elbowPose = createPose(side .. "LowerArm", kfData.poses[side .. "Elbow"], shoulderPose)
+				end
+				if kfData.poses[side .. "Wrist"] then
+					createPose(side .. "Hand", kfData.poses[side .. "Wrist"], elbowPose)
+				end
+				shoulderPose.Parent = upperTorsoPose
+			end
+
+			-- Legs
+			for _, side in ipairs({ "Left", "Right" }) do
+				local hipPose = createPose(side .. "UpperLeg", kfData.poses[side .. "Hip"], nil)
+				local kneePose = hipPose
+				if kfData.poses[side .. "Knee"] then
+					kneePose = createPose(side .. "LowerLeg", kfData.poses[side .. "Knee"], hipPose)
+				end
+				if kfData.poses[side .. "Ankle"] then
+					createPose(side .. "Foot", kfData.poses[side .. "Ankle"], kneePose)
+				end
+				hipPose.Parent = lowerTorsoPose
+			end
+
+			upperTorsoPose.Parent = lowerTorsoPose
+			lowerTorsoPose.Parent = rootPose
+		else
+			-- R6 Pose Structure
+			local torsoPose = createPose("Torso", kfData.poses["RootJoint"], nil)
+
+			if kfData.poses["Neck"] then
+				createPose("Head", kfData.poses["Neck"], torsoPose)
+			end
+
+			for _, limb in ipairs({ "Left Shoulder", "Right Shoulder", "Left Hip", "Right Hip" }) do
+				if kfData.poses[limb] then
+					local partName = limb == "Left Shoulder" and "Left Arm"
+						or limb == "Right Shoulder" and "Right Arm"
+						or limb == "Left Hip" and "Left Leg"
+						or "Right Leg"
+					createPose(partName, kfData.poses[limb], torsoPose)
+				end
+			end
+
+			torsoPose.Parent = rootPose
+		end
+
+		-- Lampirkan VFX KeyframeMarkers jika ada event di frame ini
+		if opts.vfx_events and type(opts.vfx_events) == "table" then
+			for _, evt in ipairs(opts.vfx_events) do
+				local evtTime = tonumber(evt.time) or 0
+				if math.abs(evtTime - kfData.time) <= 0.08 then
+					local marker = Instance.new("KeyframeMarker")
+					marker.Name = evt.marker_name or "VFX"
+					marker.Value = evt.value or evt.action or "Emit"
+					marker.Parent = kf
+				end
+			end
+		end
+
+		rootPose.Parent = kf
+		kf.Parent = seq
+	end
+
+	return seq
+end
+
+-- ── 3. Eksekusi Perintah Pembuatan Animasi ────────────────────────────────────
+function Dispatcher.createAnimation(
+	targetInstance: Instance,
+	action: string,
+	parameters: { [string]: any }?,
+	keyPoses: { any }?
+): { [string]: any }
+	local rigInfo = Dispatcher.getRigInfo(targetInstance)
+	if not rigInfo then
+		return { status = "error", error = "Target bukan model karakter rig (R6/R15) yang valid: " .. targetInstance:GetFullName() }
+	end
+
+	local params = parameters or {}
+	local clipName = params.clipName or (action .. "_" .. (rigInfo.isR15 and "R15" or "R6"))
+	local keyframes: { Motion.KeyframeData }
+
+	if action == "walk_cycle" or action == "walk" then
+		keyframes = Motion.generateWalkCycle(rigInfo, params)
+	elseif action == "melee_slash" or action == "slash" or action == "sword" then
+		keyframes = Motion.generateMeleeSlash(rigInfo, params)
+	elseif action == "punch" or action == "combat_punch" then
+		keyframes = Motion.generatePunch(rigInfo, params)
+	elseif action == "idle" or action == "idle_breath" then
+		keyframes = Motion.generateIdle(rigInfo, params)
+	elseif action == "custom" and keyPoses and #keyPoses > 0 then
+		-- Parser custom keyposes dari input agent
+		keyframes = {}
+		for _, kp in ipairs(keyPoses) do
+			local motorCfs: { [string]: CFrame } = {}
+			if kp.poses then
+				for mName, cVal in pairs(kp.poses) do
+					if type(cVal) == "table" and cVal.t == "CFrame" then
+						motorCfs[mName] = CFrame.new(table.unpack(cVal.v))
+					elseif type(cVal) == "table" and cVal.angles then
+						local a = cVal.angles
+						motorCfs[mName] = CFrame.Angles(math.rad(a[1] or 0), math.rad(a[2] or 0), math.rad(a[3] or 0))
+					end
+				end
+			end
+			table.insert(keyframes, {
+				time = tonumber(kp.time) or 0,
+				poses = motorCfs
+			})
+		end
+	else
+		return {
+			status = "error",
+			error = "Action tidak dikenal: '" .. tostring(action) .. "'. Pilihan: walk_cycle, melee_slash, punch, idle_breath, custom."
+		}
+	end
+
+	-- Simpan KeyframeSequence ke AnimSaves pada Rig
+	local animSaves = rigInfo.model:FindFirstChild("AnimSaves")
+	if not animSaves then
+		animSaves = Instance.new("Model")
+		animSaves.Name = "AnimSaves"
+		animSaves.Parent = rigInfo.model
+	end
+
+	local kfSeq = Dispatcher.buildKeyframeSequence(rigInfo, clipName, keyframes, {
+		loop = params.loop,
+		priority = Enum.AnimationPriority.Action,
+		vfx_events = params.vfx_events
+	})
+	kfSeq.Parent = animSaves
+
+	-- Terapkan pose pertama ke karakter di Studio untuk live feedback
+	if keyframes[1] and keyframes[1].poses then
+		for mName, cf in pairs(keyframes[1].poses) do
+			local m = rigInfo.motors[mName]
+			if m then
+				pcall(function() m.C0 = cf end)
+			end
+		end
+	end
+
+	return {
+		status = "success",
+		result = {
+			clipName = clipName,
+			action = action,
+			rigType = rigInfo.isR15 and "R15" or "R6",
+			keyframeCount = #keyframes,
+			duration = keyframes[#keyframes].time,
+			savedPath = kfSeq:GetFullName(),
+			message = string.format("Animasi '%s' berhasil dibuat dan disimpan ke '%s'", clipName, kfSeq:GetFullName())
+		}
+	}
+end
+
+return Dispatcher
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_nv_auto_rigger">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">nv_auto_rigger</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- NVStudio Subsystem: nv_auto_rigger
+-- Deskripsi: Mesin Auto-Rigging Deterministik & Heuristik Geometris
+-- Membangun struktur rig lengkap untuk Avatar R6, R15, Senjata/Prop,
+-- dan Assembly Model secara instan dengan zero-dislocation math.
+-- ══════════════════════════════════════════════════════════════════════
+
+local jointMathMod = script.Parent:WaitForChild("nv_joint_math")
+local JointMath = require(jointMathMod)
+
+local AutoRigger = {}
+
+-- ── Helper: Dapatkan atau buat Motor6D ─────────────────────────────────────────
+local function createOrUpdateMotor(name: string, part0: BasePart, part1: BasePart, parent: Instance?): Motor6D
+	part1.Anchored = false
+	local existing = part0:FindFirstChild(name) or part1:FindFirstChild(name)
+	local motor: Motor6D
+	if existing and existing:IsA("Motor6D") then
+		motor = existing
+	else
+		motor = Instance.new("Motor6D")
+		motor.Name = name
+	end
+
+	motor.Part0 = part0
+	motor.Part1 = part1
+	local c0, c1 = JointMath.computeInitialOffsets(part0, part1)
+	motor.C0 = c0
+	motor.C1 = c1
+	motor.Parent = parent or part0
+	return motor
+end
+
+-- ── 1. Auto-Rig R6 Avatar ─────────────────────────────────────────────────────
+function AutoRigger.rigR6(model: Model): { [string]: any }
+	assert(model and model:IsA("Model"), "Target harus berupa Model")
+
+	local parts: { [string]: BasePart } = {}
+	for _, desc in ipairs(model:GetDescendants()) do
+		if desc:IsA("BasePart") then
+			parts[desc.Name] = desc
+		end
+	end
+
+	local torso = parts["Torso"] or parts["UpperTorso"]
+	if not torso then
+		return { status = "error", error = "Model tidak memiliki part 'Torso' untuk R6 rig." }
+	end
+
+	local rootPart = parts["HumanoidRootPart"]
+	if not rootPart then
+		-- Buat HumanoidRootPart transparan jika belum ada
+		rootPart = Instance.new("Part")
+		rootPart.Name = "HumanoidRootPart"
+		rootPart.Size = Vector3.new(2, 2, 1)
+		rootPart.Transparency = 1
+		rootPart.CanCollide = false
+		rootPart.CFrame = torso.CFrame
+		rootPart.Parent = model
+		parts["HumanoidRootPart"] = rootPart
+		model.PrimaryPart = rootPart
+	end
+
+	local created = {}
+
+	-- 1. RootJoint: HumanoidRootPart -> Torso
+	local rootJoint = createOrUpdateMotor("RootJoint", rootPart, torso, rootPart)
+	table.insert(created, "RootJoint")
+
+	-- 2. Neck: Torso -> Head
+	if parts["Head"] then
+		createOrUpdateMotor("Neck", torso, parts["Head"], torso)
+		table.insert(created, "Neck")
+	end
+
+	-- 3. Shoulders: Torso -> Arms
+	local lArm = parts["Left Arm"] or parts["LeftArm"]
+	if lArm then
+		createOrUpdateMotor("Left Shoulder", torso, lArm, torso)
+		table.insert(created, "Left Shoulder")
+	end
+
+	local rArm = parts["Right Arm"] or parts["RightArm"]
+	if rArm then
+		createOrUpdateMotor("Right Shoulder", torso, rArm, torso)
+		table.insert(created, "Right Shoulder")
+	end
+
+	-- 4. Hips: Torso -> Legs
+	local lLeg = parts["Left Leg"] or parts["LeftLeg"]
+	if lLeg then
+		createOrUpdateMotor("Left Hip", torso, lLeg, torso)
+		table.insert(created, "Left Hip")
+	end
+
+	local rLeg = parts["Right Leg"] or parts["RightLeg"]
+	if rLeg then
+		createOrUpdateMotor("Right Hip", torso, rLeg, torso)
+		table.insert(created, "Right Hip")
+	end
+
+	-- Pastikan Humanoid bertipe R6
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.RigType = Enum.HumanoidRigType.R6
+	end
+
+	return {
+		status = "success",
+		rigType = "R6",
+		jointsCreated = #created,
+		jointNames = created,
+		rootPart = rootPart.Name
+	}
+end
+
+-- ── 2. Auto-Rig R15 Avatar ────────────────────────────────────────────────────
+function AutoRigger.rigR15(model: Model): { [string]: any }
+	assert(model and model:IsA("Model"), "Target harus berupa Model")
+
+	local parts: { [string]: BasePart } = {}
+	for _, desc in ipairs(model:GetDescendants()) do
+		if desc:IsA("BasePart") then
+			parts[desc.Name] = desc
+		end
+	end
+
+	local lowerTorso = parts["LowerTorso"]
+	local upperTorso = parts["UpperTorso"]
+	if not lowerTorso or not upperTorso then
+		return { status = "error", error = "Model tidak memiliki 'LowerTorso' dan 'UpperTorso' untuk R15 rig." }
+	end
+
+	local rootPart = parts["HumanoidRootPart"]
+	if not rootPart then
+		rootPart = Instance.new("Part")
+		rootPart.Name = "HumanoidRootPart"
+		rootPart.Size = Vector3.new(2, 2, 1)
+		rootPart.Transparency = 1
+		rootPart.CanCollide = false
+		rootPart.CFrame = lowerTorso.CFrame
+		rootPart.Parent = model
+		parts["HumanoidRootPart"] = rootPart
+		model.PrimaryPart = rootPart
+	end
+
+	local r15Hierarchy = {
+		{ name = "Root", p0 = "HumanoidRootPart", p1 = "LowerTorso" },
+		{ name = "Waist", p0 = "LowerTorso", p1 = "UpperTorso" },
+		{ name = "Neck", p0 = "UpperTorso", p1 = "Head" },
+
+		-- Left Arm Chain
+		{ name = "LeftShoulder", p0 = "UpperTorso", p1 = "LeftUpperArm" },
+		{ name = "LeftElbow", p0 = "LeftUpperArm", p1 = "LeftLowerArm" },
+		{ name = "LeftWrist", p0 = "LeftLowerArm", p1 = "LeftHand" },
+
+		-- Right Arm Chain
+		{ name = "RightShoulder", p0 = "UpperTorso", p1 = "RightUpperArm" },
+		{ name = "RightElbow", p0 = "RightUpperArm", p1 = "RightLowerArm" },
+		{ name = "RightWrist", p0 = "RightLowerArm", p1 = "RightHand" },
+
+		-- Left Leg Chain
+		{ name = "LeftHip", p0 = "LowerTorso", p1 = "LeftUpperLeg" },
+		{ name = "LeftKnee", p0 = "LeftUpperLeg", p1 = "LeftLowerLeg" },
+		{ name = "LeftAnkle", p0 = "LeftLowerLeg", p1 = "LeftFoot" },
+
+		-- Right Leg Chain
+		{ name = "RightHip", p0 = "LowerTorso", p1 = "RightUpperLeg" },
+		{ name = "RightKnee", p0 = "RightUpperLeg", p1 = "RightLowerLeg" },
+		{ name = "RightAnkle", p0 = "RightLowerLeg", p1 = "RightFoot" }
+	}
+
+	local created = {}
+	for _, item in ipairs(r15Hierarchy) do
+		local p0 = parts[item.p0]
+		local p1 = parts[item.p1]
+		if p0 and p1 then
+			createOrUpdateMotor(item.name, p0, p1, p0)
+			table.insert(created, item.name)
+		end
+	end
+
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.RigType = Enum.HumanoidRigType.R15
+	end
+
+	return {
+		status = "success",
+		rigType = "R15",
+		jointsCreated = #created,
+		jointNames = created,
+		rootPart = rootPart.Name
+	}
+end
+
+-- ── 3. Rig Weapon / Tool ke Karakter ──────────────────────────────────────────
+function AutoRigger.rigWeapon(characterModel: Model, weaponInstance: Instance, targetLimbName: string?): { [string]: any }
+	assert(characterModel and characterModel:IsA("Model"), "Character target harus berupa Model")
+	assert(weaponInstance and weaponInstance:IsA("Instance"), "Weapon target tidak valid")
+
+	local parts: { [string]: BasePart } = {}
+	for _, desc in ipairs(characterModel:GetDescendants()) do
+		if desc:IsA("BasePart") then
+			parts[desc.Name] = desc
+		end
+	end
+
+	local limb = targetLimbName and parts[targetLimbName]
+	if not limb then
+		limb = parts["RightHand"] or parts["Right Arm"] or parts["RightArm"] or parts["HumanoidRootPart"]
+	end
+	if not limb then
+		return { status = "error", error = "Tidak dapat menemukan anggota tubuh target (RightHand / Right Arm) pada karakter." }
+	end
+
+	-- Cari handle pada senjata
+	local weaponHandle: BasePart? = nil
+	if weaponInstance:IsA("BasePart") then
+		weaponHandle = weaponInstance
+	elseif weaponInstance:IsA("Model") or weaponInstance:IsA("Tool") then
+		weaponHandle = (weaponInstance :: any).PrimaryPart
+			or weaponInstance:FindFirstChild("Handle") :: BasePart?
+			or weaponInstance:FindFirstChildWhichIsA("BasePart")
+	end
+
+	if not weaponHandle then
+		return { status = "error", error = "Senjata tidak memiliki BasePart atau Handle." }
+	end
+
+	-- 1. Buat Motor6D penaut karakter ke Handle
+	local weaponMotor = createOrUpdateMotor("WeaponGrip", limb, weaponHandle, limb)
+
+	-- 2. Las seluruh bagian senjata lain ke Handle
+	local weldedCount = 0
+	if weaponInstance ~= weaponHandle then
+		for _, desc in ipairs(weaponInstance:GetDescendants()) do
+			if desc:IsA("BasePart") and desc ~= weaponHandle then
+				desc.Anchored = false
+				local weld = desc:FindFirstChild("WeldToHandle") or Instance.new("Weld")
+				weld.Name = "WeldToHandle"
+				weld.Part0 = weaponHandle
+				weld.Part1 = desc
+				weld.C0 = weaponHandle.CFrame:ToObjectSpace(desc.CFrame)
+				weld.C1 = CFrame.identity
+				weld.Parent = weaponHandle
+				weldedCount += 1
+			end
+		end
+	end
+
+	return {
+		status = "success",
+		attachedTo = limb.Name,
+		handleName = weaponHandle.Name,
+		weldedComponents = weldedCount,
+		message = string.format("Senjata '%s' berhasil dirig ke '%s' (%d part dilas)", weaponInstance.Name, limb.Name, weldedCount)
+	}
+end
+
+-- ── 4. Weld Assembly (Props, Armor, Kendaraan) ────────────────────────────────
+function AutoRigger.weldAssembly(container: Instance, primaryPart: BasePart?): { [string]: any }
+	assert(container and container:IsA("Instance"), "Container tidak valid")
+
+	local rootPart: BasePart? = primaryPart
+	if not rootPart and container:IsA("Model") then
+		rootPart = container.PrimaryPart
+	end
+
+	local allParts: { BasePart } = {}
+	for _, desc in ipairs(container:GetDescendants()) do
+		if desc:IsA("BasePart") then
+			table.insert(allParts, desc)
+		end
+	end
+	if container:IsA("BasePart") then
+		table.insert(allParts, container)
+	end
+
+	if #allParts == 0 then
+		return { status = "error", error = "Tidak ada BasePart di dalam kontainer untuk dilas." }
+	end
+
+	-- Jika belum ada rootPart, tentukan berdasarkan volume terbesar
+	if not rootPart then
+		local maxVol = -1
+		for _, p in ipairs(allParts) do
+			local vol = p.Size.X * p.Size.Y * p.Size.Z
+			if vol > maxVol then
+				maxVol = vol
+				rootPart = p
+			end
+		end
+	end
+
+	if not rootPart then
+		return { status = "error", error = "Gagal menentukan Root Part untuk pengelasan." }
+	end
+
+	local weldsCreated = 0
+	for _, p in ipairs(allParts) do
+		if p ~= rootPart then
+			p.Anchored = false
+			local w = p:FindFirstChild("AssemblyWeld") or Instance.new("Weld")
+			w.Name = "AssemblyWeld"
+			w.Part0 = rootPart
+			w.Part1 = p
+			w.C0 = rootPart.CFrame:ToObjectSpace(p.CFrame)
+			w.C1 = CFrame.identity
+			w.Parent = rootPart
+			weldsCreated += 1
+		end
+	end
+
+	return {
+		status = "success",
+		rootPart = rootPart.Name,
+		weldsCreated = weldsCreated,
+		message = string.format("Berhasil mengelas %d part ke Root '%s'", weldsCreated, rootPart.Name)
+	}
+end
+
+-- ── 5. Spatial Geometric Limb Analyzer (Heuristik Bounding Box) ───────────────
+-- Menganalisis model dengan nama part acak/impor dan mengklasifikasikan anggota tubuh
+function AutoRigger.discoverLimbsBySpatialGeometry(model: Model): { [string]: BasePart }
+	local parts: { BasePart } = {}
+	for _, desc in ipairs(model:GetDescendants()) do
+		if desc:IsA("BasePart") then
+			table.insert(parts, desc)
+		end
+	end
+
+	if #parts == 0 then return {} end
+
+	-- 1. Hitung bounding box pusat model
+	local cframe, size = model:GetBoundingBox()
+	local center = cframe.Position
+
+	-- 2. Temukan torso (part dengan volume besar di sekitar pusat vertikal)
+	local bestTorso: BasePart = parts[1]
+	local bestScore = -1e9
+
+	for _, p in ipairs(parts) do
+		local vol = p.Size.X * p.Size.Y * p.Size.Z
+		local distToCenter = (p.Position - center).Magnitude
+		local score = vol / (distToCenter + 1)
+		if score > bestScore then
+			bestScore = score
+			bestTorso = p
+		end
+	end
+
+	local identified: { [string]: BasePart } = {
+		Torso = bestTorso
+	}
+
+	local torsoPos = bestTorso.Position
+
+	-- 3. Klasifikasi part lainnya relatif terhadap Torso
+	for _, p in ipairs(parts) do
+		if p ~= bestTorso then
+			local relPos = bestTorso.CFrame:PointToObjectSpace(p.Position)
+
+			if relPos.Y > bestTorso.Size.Y * 0.5 then
+				-- Bagian atas -> Head
+				if not identified["Head"] or p.Position.Y > identified["Head"].Position.Y then
+					identified["Head"] = p
+				end
+			elseif relPos.Y < -bestTorso.Size.Y * 0.3 then
+				-- Bagian bawah -> Legs
+				if relPos.X < 0 then
+					identified["Left Leg"] = p
+				else
+					identified["Right Leg"] = p
+				end
+			else
+				-- Bagian samping -> Arms
+				if relPos.X < 0 then
+					identified["Left Arm"] = p
+				else
+					identified["Right Arm"] = p
+				end
+			end
+		end
+	end
+
+	return identified
+end
+
+return AutoRigger
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_nv_curves">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">nv_curves</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+--!native
+-- ══════════════════════════════════════════════════════════════════════
+-- NVStudio Subsystem: nv_curves
+-- Deskripsi: Mesin Kurva Cubic Bezier, Easing Functions & Quaternion SLERP
+-- Menghitung interpolasi waktu dan rotasi sendi secara ultra-halus
+-- layaknya kurva Graph Editor animator profesional.
+-- ══════════════════════════════════════════════════════════════════════
+
+local Curves = {}
+local PI = math.pi
+local HALF_PI = math.pi * 0.5
+local TAU = math.pi * 2
+local DEFAULT_OVERSHOOT = 1.70158
+
+-- ── 1. Cubic Bezier Solver ───────────────────────────────────────────────────
+function Curves.bezierParameter(alpha: number, x1: number, x2: number): number
+	if alpha <= 0 then return 0 end
+	if alpha >= 1 then return 1 end
+
+	x1 = math.clamp(x1, 0, 1)
+	x2 = math.clamp(x2, 0, 1)
+
+	local lo, hi, u = 0, 1, alpha
+	for _ = 1, 32 do
+		local v = 1 - u
+		local x = 3 * v * v * u * x1 + 3 * v * u * u * x2 + u * u * u
+		local delta = x - alpha
+		if math.abs(delta) <= 1e-7 then
+			break
+		end
+
+		if delta < 0 then
+			lo = u
+		else
+			hi = u
+		end
+
+		local deriv = 3 * v * v * x1 + 6 * v * u * (x2 - x1) + 3 * u * u * (1 - x2)
+		local cand = deriv > 1e-7 and (u - delta / deriv) or -1
+		u = (cand > lo and cand < hi) and cand or (lo + hi) * 0.5
+	end
+
+	return u
+end
+
+function Curves.cubic(a: number, b: number, c: number, d: number, u: number): number
+	local v = 1 - u
+	return a * (v * v * v) + b * (3 * v * v * u) + c * (3 * v * u * u) + d * (u * u * u)
+end
+
+function Curves.bezierAlpha(t: number, x1: number?, y1: number?, x2: number?, y2: number?): number
+	if t <= 0 then return 0 end
+	if t >= 1 then return 1 end
+
+	local px1 = x1 or 0.42
+	local py1 = y1 or 0.0
+	local px2 = x2 or 0.58
+	local py2 = y2 or 1.0
+
+	local u = Curves.bezierParameter(t, px1, px2)
+	return Curves.cubic(0, py1, py2, 1, u)
+end
+
+-- ── 2. Standard Easing Functions ─────────────────────────────────────────────
+local EasingTable: { [string]: (t: number) -> number } = {
+	Linear = function(t) return t end,
+
+	SineIn = function(t) return 1 - math.cos(t * HALF_PI) end,
+	SineOut = function(t) return math.sin(t * HALF_PI) end,
+	SineInOut = function(t) return -(math.cos(PI * t) - 1) * 0.5 end,
+
+	QuadIn = function(t) return t * t end,
+	QuadOut = function(t) return t * (2 - t) end,
+	QuadInOut = function(t) return t < 0.5 and (2 * t * t) or (-1 + (4 - 2 * t) * t) end,
+
+	CubicIn = function(t) return t * t * t end,
+	CubicOut = function(t) local f = t - 1 return f * f * f + 1 end,
+	CubicInOut = function(t) return t < 0.5 and (4 * t * t * t) or ((t - 1) * (2 * t - 2) * (2 * t - 2) + 1) end,
+
+	QuartIn = function(t) return t * t * t * t end,
+	QuartOut = function(t) local f = t - 1 return 1 - f * f * f * f end,
+	QuartInOut = function(t) local f = t - 1 return t < 0.5 and (8 * t * t * t * t) or (1 - 8 * f * f * f * f) end,
+
+	ExpoIn = function(t) return t == 0 and 0 or math.pow(2, 10 * (t - 1)) end,
+	ExpoOut = function(t) return t == 1 and 1 or (1 - math.pow(2, -10 * t)) end,
+	ExpoInOut = function(t)
+		if t == 0 then return 0 end
+		if t == 1 then return 1 end
+		if t < 0.5 then return math.pow(2, 20 * t - 10) * 0.5 end
+		return (2 - math.pow(2, -20 * t + 10)) * 0.5
+	end,
+
+	BackIn = function(t) local s = DEFAULT_OVERSHOOT return t * t * ((s + 1) * t - s) end,
+	BackOut = function(t) local s = DEFAULT_OVERSHOOT local f = t - 1 return f * f * ((s + 1) * f + s) + 1 end,
+	BackInOut = function(t)
+		local s = DEFAULT_OVERSHOOT * 1.525
+		local f = t * 2
+		if f < 1 then return 0.5 * (f * f * ((s + 1) * f - s)) end
+		f = f - 2
+		return 0.5 * (f * f * ((s + 1) * f + s) + 2)
+	end,
+
+	BounceOut = function(t)
+		if t < (1 / 2.75) then
+			return 7.5625 * t * t
+		elseif t < (2 / 2.75) then
+			local f = t - (1.5 / 2.75)
+			return 7.5625 * f * f + 0.75
+		elseif t < (2.5 / 2.75) then
+			local f = t - (2.25 / 2.75)
+			return 7.5625 * f * f + 0.9375
+		else
+			local f = t - (2.625 / 2.75)
+			return 7.5625 * f * f + 0.984375
+		end
+	end,
+	BounceIn = function(t)
+		local fn = nil
+		-- forward declaration
+		return 1 - (function(x)
+			if x < (1 / 2.75) then return 7.5625 * x * x
+			elseif x < (2 / 2.75) then local f = x - (1.5 / 2.75) return 7.5625 * f * f + 0.75
+			elseif x < (2.5 / 2.75) then local f = x - (2.25 / 2.75) return 7.5625 * f * f + 0.9375
+			else local f = x - (2.625 / 2.75) return 7.5625 * f * f + 0.984375 end
+		end)(1 - t)
+	end,
+	BounceInOut = function(t)
+		local bounceOut = function(x: number): number
+			if x < (1 / 2.75) then return 7.5625 * x * x
+			elseif x < (2 / 2.75) then local f = x - (1.5 / 2.75) return 7.5625 * f * f + 0.75
+			elseif x < (2.5 / 2.75) then local f = x - (2.25 / 2.75) return 7.5625 * f * f + 0.9375
+			else local f = x - (2.625 / 2.75) return 7.5625 * f * f + 0.984375 end
+		end
+		if t < 0.5 then
+			return (1 - bounceOut(1 - t * 2)) * 0.5
+		end
+		return bounceOut(t * 2 - 1) * 0.5 + 0.5
+	end,
+
+	ElasticOut = function(t)
+		if t == 0 then return 0 end
+		if t == 1 then return 1 end
+		local p = 0.3
+		local s = p / 4
+		return math.pow(2, -10 * t) * math.sin((t - s) * TAU / p) + 1
+	end,
+	ElasticIn = function(t)
+		if t == 0 then return 0 end
+		if t == 1 then return 1 end
+		local p = 0.3
+		local s = p / 4
+		local f = t - 1
+		return -(math.pow(2, 10 * f) * math.sin((f - s) * TAU / p))
+	end,
+	ElasticInOut = function(t)
+		if t == 0 then return 0 end
+		if t == 1 then return 1 end
+		local p = 0.3 * 1.5
+		local s = p / 4
+		local f = t * 2 - 1
+		if f < 0 then
+			return -0.5 * (math.pow(2, 10 * f) * math.sin((f - s) * TAU / p))
+		end
+		return math.pow(2, -10 * f) * math.sin((f - s) * TAU / p) * 0.5 + 1
+	end
+}
+
+function Curves.evaluate(easingName: string?, t: number): number
+	t = math.clamp(t, 0, 1)
+	local name = easingName or "QuadInOut"
+	local fn = EasingTable[name]
+	if fn then
+		return fn(t)
+	end
+	return t
+end
+
+-- ── 3. Quaternion SLERP (Spherical Linear Interpolation) ──────────────────────
+-- Representasi Quaternion: { x, y, z, w }
+type Quat = { x: number, y: number, z: number, w: number }
+
+local function cframeToQuat(cf: CFrame): (Vector3, Quat)
+	local _, _, _, m00, m01, m02, m10, m11, m12, m20, m21, m22 = cf:GetComponents()
+	local trace = m00 + m11 + m22
+	local q: Quat
+	if trace > 0 then
+		local s = math.sqrt(trace + 1) * 2
+		q = { x = (m21 - m12) / s, y = (m02 - m20) / s, z = (m10 - m01) / s, w = 0.25 * s }
+	elseif (m00 > m11) and (m00 > m22) then
+		local s = math.sqrt(1 + m00 - m11 - m22) * 2
+		q = { x = 0.25 * s, y = (m01 + m10) / s, z = (m02 + m20) / s, w = (m21 - m12) / s }
+	elseif m11 > m22 then
+		local s = math.sqrt(1 + m11 - m00 - m22) * 2
+		q = { x = (m01 + m10) / s, y = 0.25 * s, z = (m12 + m21) / s, w = (m02 - m20) / s }
+	else
+		local s = math.sqrt(1 + m22 - m00 - m11) * 2
+		q = { x = (m02 + m20) / s, y = (m12 + m21) / s, z = 0.25 * s, w = (m10 - m01) / s }
+	end
+	return cf.Position, q
+end
+
+local function quatToCFrame(pos: Vector3, q: Quat): CFrame
+	local x, y, z, w = q.x, q.y, q.z, q.w
+	local xx, yy, zz = x * x, y * y, z * z
+	local xy, xz, yz = x * y, x * z, y * z
+	local wx, wy, wz = w * x, w * y, w * z
+
+	return CFrame.new(
+		pos.X, pos.Y, pos.Z,
+		1 - 2 * (yy + zz), 2 * (xy - wz), 2 * (xz + wy),
+		2 * (xy + wz), 1 - 2 * (xx + zz), 2 * (yz - wx),
+		2 * (xz - wy), 2 * (yz + wx), 1 - 2 * (xx + yy)
+	)
+end
+
+function Curves.slerp(cfA: CFrame, cfB: CFrame, alpha: number): CFrame
+	if alpha <= 0 then return cfA end
+	if alpha >= 1 then return cfB end
+
+	local posA, qA = cframeToQuat(cfA)
+	local posB, qB = cframeToQuat(cfB)
+
+	local cosHalfTheta = qA.x * qB.x + qA.y * qB.y + qA.z * qB.z + qA.w * qB.w
+	if cosHalfTheta < 0 then
+		qB = { x = -qB.x, y = -qB.y, z = -qB.z, w = -qB.w }
+		cosHalfTheta = -cosHalfTheta
+	end
+
+	local qResult: Quat
+	if math.abs(cosHalfTheta) >= 1 then
+		qResult = qA
+	else
+		local halfTheta = math.acos(math.clamp(cosHalfTheta, -1, 1))
+		local sinHalfTheta = math.sqrt(1 - cosHalfTheta * cosHalfTheta)
+		if math.abs(sinHalfTheta) < 1e-4 then
+			qResult = {
+				x = qA.x * (1 - alpha) + qB.x * alpha,
+				y = qA.y * (1 - alpha) + qB.y * alpha,
+				z = qA.z * (1 - alpha) + qB.z * alpha,
+				w = qA.w * (1 - alpha) + qB.w * alpha,
+			}
+		else
+			local ratioA = math.sin((1 - alpha) * halfTheta) / sinHalfTheta
+			local ratioB = math.sin(alpha * halfTheta) / sinHalfTheta
+			qResult = {
+				x = qA.x * ratioA + qB.x * ratioB,
+				y = qA.y * ratioA + qB.y * ratioB,
+				z = qA.z * ratioA + qB.z * ratioB,
+				w = qA.w * ratioA + qB.w * ratioB,
+			}
+		end
+	end
+
+	local interpPos = posA:Lerp(posB, alpha)
+	return quatToCFrame(interpPos, qResult)
+end
+
+return Curves
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_nv_joint_math">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">nv_joint_math</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- NVStudio Subsystem: nv_joint_math
+-- Deskripsi: Modul Matematika Kinematika Sambungan (Joints) & Transformasi
+-- Menyediakan kalkulasi C0/C1 presisi, pemindahan poros tanpa dislokasi,
+-- rotasi poros, penyelarasan koordinat, dan pencerminan simetri bilateral.
+-- ══════════════════════════════════════════════════════════════════════
+
+local JointMath = {}
+
+local EPSILON = 1e-6
+
+-- ── 1. Hitung Offset Awal C0 & C1 ─────────────────────────────────────────────
+-- Menghubungkan Part0 dan Part1 tanpa mengubah posisi relatif fisik saat ini
+function JointMath.computeInitialOffsets(part0: BasePart, part1: BasePart): (CFrame, CFrame)
+	local c0 = part0.CFrame:ToObjectSpace(part1.CFrame)
+	local c1 = CFrame.identity
+	return c0, c1
+end
+
+-- ── 2. Geser Poros Sendi di Koordinat Dunia (World Delta) ─────────────────────
+-- Menggeser titik pivot tanpa mendislokasi posisi part anak di dunia 3D
+function JointMath.offsetPivot(joint: JointInstance, deltaWorld: Vector3): boolean
+	local part0 = joint.Part0
+	local part1 = joint.Part1
+	if not part0 or not part1 then return false end
+
+	local origJointWorld = part0.CFrame * joint.C0
+	local desiredWorld = origJointWorld + deltaWorld
+
+	local newC0 = part0.CFrame:ToObjectSpace(desiredWorld)
+	local diff = joint.C0:ToObjectSpace(newC0)
+	local newC1 = joint.C1 * diff
+
+	joint.C0 = newC0
+	joint.C1 = newC1
+	return true
+end
+
+-- ── 3. Tetapkan Posisi Poros ke Titik Dunia Absolut (Set World Position) ──────
+-- Memindahkan titik tumpu sendi tepat ke koordinat 3D yang diinginkan
+function JointMath.setPivotWorld(joint: JointInstance, targetWorldPos: Vector3): boolean
+	local part0 = joint.Part0
+	local part1 = joint.Part1
+	if not part0 or not part1 then return false end
+
+	local origJointWorld = part0.CFrame * joint.C0
+	local targetWorldCF = CFrame.new(targetWorldPos) * origJointWorld.Rotation
+
+	local newC0 = part0.CFrame:ToObjectSpace(targetWorldCF)
+	local diff = joint.C0:ToObjectSpace(newC0)
+	local newC1 = joint.C1 * diff
+
+	joint.C0 = newC0
+	joint.C1 = newC1
+	return true
+end
+
+-- ── 4. Rotasi Poros Sendi Tanpa Merusak Rig ───────────────────────────────────
+-- Memutar orientasi poros sendi sebesar sudut Euler radian
+function JointMath.rotatePivot(joint: JointInstance, rotEulerRad: Vector3): boolean
+	local part0 = joint.Part0
+	local part1 = joint.Part1
+	if not part0 or not part1 then return false end
+
+	local rotCF = CFrame.Angles(rotEulerRad.X, rotEulerRad.Y, rotEulerRad.Z)
+	joint.C0 = joint.C0 * rotCF
+	joint.C1 = joint.C1 * rotCF
+	return true
+end
+
+-- ── 5. Reset Poros Sendi ke Pusat Part Anak ───────────────────────────────────
+-- Mengembalikan poros sendi ke origin geometris Part1
+function JointMath.resetPivot(joint: JointInstance): boolean
+	local part0 = joint.Part0
+	local part1 = joint.Part1
+	if not part0 or not part1 then return false end
+
+	joint.C0 = part0.CFrame:ToObjectSpace(part1.CFrame)
+	joint.C1 = CFrame.identity
+	return true
+end
+
+-- ── 6. Selaraskan Orientasi Poros ke Part0 atau Part1 ─────────────────────────
+-- Menjaga posisi poros di dunia tetap sama, tetapi rotasinya mengikuti part referensi
+function JointMath.alignJoint(joint: JointInstance, alignTo: "Part0" | "Part1"): boolean
+	local part0 = joint.Part0
+	local part1 = joint.Part1
+	if not part0 or not part1 then return false end
+
+	local pivotWorldPos = (part0.CFrame * joint.C0).Position
+	local refCF = alignTo == "Part0" and part0.CFrame or part1.CFrame
+	local targetWorldCF = CFrame.new(pivotWorldPos) * refCF.Rotation
+
+	local newC0 = part0.CFrame:ToObjectSpace(targetWorldCF)
+	local diff = joint.C0:ToObjectSpace(newC0)
+	local newC1 = joint.C1 * diff
+
+	joint.C0 = newC0
+	joint.C1 = newC1
+	return true
+end
+
+-- ── 7. Refleksi CFrame Sumbu X Simetris (Bilateral Mirroring) ──────────────────
+-- Mencerminkan CFrame melewati bidang sagittal (sumbu X)
+function JointMath.mirrorCFrame(cf: CFrame): CFrame
+	local x, y, z,
+		r00, r01, r02,
+		r10, r11, r12,
+		r20, r21, r22 = cf:GetComponents()
+
+	-- Refleksi koordinat posisi dan rotasi M_x * R * M_x
+	return CFrame.new(
+		-x, y, z,
+		r00, -r01, -r02,
+		-r10, r11, r12,
+		-r20, r21, r22
+	)
+end
+
+-- ── 8. Cerminkan Sendi Bilateral Kiri <-> Kanan ────────────────────────────────
+-- Menerapkan C0 dan C1 yang telah dicerminkan dari sumber ke sendi target
+function JointMath.mirrorJoint(sourceJoint: JointInstance, targetJoint: JointInstance): boolean
+	if not sourceJoint or not targetJoint then return false end
+	targetJoint.C0 = JointMath.mirrorCFrame(sourceJoint.C0)
+	targetJoint.C1 = JointMath.mirrorCFrame(sourceJoint.C1)
+	return true
+end
+
+-- ── 9. Dapatkan Posisi Poros di Dunia ─────────────────────────────────────────
+function JointMath.getJointWorldPosition(joint: JointInstance): Vector3?
+	local part0 = joint.Part0
+	if not part0 then return nil end
+	return (part0.CFrame * joint.C0).Position
+end
+
+return JointMath
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_nv_kinematics">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">nv_kinematics</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- NVStudio Subsystem: nv_kinematics
+-- Deskripsi: Mesin Kinematika Analitis 2-Link LimbIK & Abstraksi R6/R15
+-- Menyelesaikan posisi siku/lutut menggunakan Hukum Cosinus O(1) tertutup,
+-- ekstensi SoftIK anti-hentakan kaku, dan stabilisasi rotasi leher/kaki.
+-- ══════════════════════════════════════════════════════════════════════
+
+local Kinematics = {}
+local EPSILON = 1e-6
+
+-- ── 1. SoftIK Algorithm ───────────────────────────────────────────────────────
+local function softDistance(dist: number, reach: number, softPercent: number?): number
+	if dist <= 0 or reach <= 0 then return 0 end
+	local pct = math.clamp(softPercent or 90, 0, 100) / 100
+	local onset = reach * pct
+	if dist <= onset then
+		return dist
+	end
+	local zone = reach - onset
+	if zone <= 0 then
+		return math.min(dist, reach)
+	end
+	local x = (dist - onset) / zone
+	local eased = x < 1e-4 and (x * (1 - x * 0.5)) or (1 - math.exp(-x))
+	return math.min(dist, reach, onset + zone * eased)
+end
+
+-- ── 2. Rotation Between Two Vectors ───────────────────────────────────────────
+function Kinematics.rotationBetween(from: Vector3, to: Vector3): CFrame
+	if from.Magnitude < EPSILON or to.Magnitude < EPSILON then
+		return CFrame.identity
+	end
+	from = from.Unit
+	to = to.Unit
+	local dot = math.clamp(from:Dot(to), -1, 1)
+	local cross = from:Cross(to)
+	if cross.Magnitude < EPSILON then
+		if dot > 0 then
+			return CFrame.identity
+		end
+		local basis = math.abs(from.X) < 0.8 and Vector3.xAxis or Vector3.yAxis
+		return CFrame.fromAxisAngle(from:Cross(basis).Unit, math.pi)
+	end
+	return CFrame.fromAxisAngle(cross.Unit, math.atan2(cross.Magnitude, dot))
+end
+
+-- ── 3. Analytical 2-Bone Limb Solver (Law of Cosines) ─────────────────────────
+function Kinematics.solveTwoLink(
+	root: Vector3,
+	middle: Vector3,
+	tip: Vector3,
+	goal: Vector3,
+	pole: Vector3?,
+	softPercent: number?
+): (Vector3, Vector3)
+	local upperLen = (middle - root).Magnitude
+	local lowerLen = (tip - middle).Magnitude
+	if upperLen < EPSILON or lowerLen < EPSILON then
+		return middle, tip
+	end
+
+	local delta = goal - root
+	local rawDist = delta.Magnitude
+	local dir = rawDist > EPSILON and delta.Unit or (tip - root).Unit
+	local reach = upperLen + lowerLen
+
+	-- Soften distance
+	local softened = softDistance(rawDist, reach, softPercent or 90)
+	local dist = math.clamp(softened, math.max(math.abs(upperLen - lowerLen), EPSILON), reach - 1e-4)
+
+	-- Bend direction towards pole
+	local polePos = pole or (middle + Vector3.new(0, 0, -1))
+	local bend = polePos - root
+	bend = bend - dir * bend:Dot(dir)
+	if bend.Magnitude < EPSILON then
+		local basis = math.abs(dir.X) < 0.8 and Vector3.xAxis or Vector3.yAxis
+		bend = basis - dir * basis:Dot(dir)
+	end
+	bend = bend.Unit
+
+	-- Law of Cosines: Upper arm projection along direction vector
+	local along = (upperLen * upperLen - lowerLen * lowerLen + dist * dist) / (2 * dist)
+	local heightSq = upperLen * upperLen - along * along
+	local height = math.sqrt(math.max(0, heightSq))
+
+	local solvedMiddle = root + dir * along + bend * height
+	local solvedTip = root + dir * dist
+	return solvedMiddle, solvedTip
+end
+
+-- ── 4. Rig Discovery & Abstraction (R6 & R15) ──────────────────────────────────
+export type RigInfo = {
+	model: Model,
+	isR15: boolean,
+	rootPart: BasePart,
+	motors: { [string]: Motor6D },
+	parts: { [string]: BasePart }
+}
+
+function Kinematics.inspectRig(model: Model): RigInfo?
+	if not model or not model:IsA("Model") then return nil end
+	local rootPart = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not rootPart then
+		rootPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+	end
+	if not rootPart then return nil end
+
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	local isR15 = humanoid and (humanoid.RigType == Enum.HumanoidRigType.R15) or false
+	if not humanoid then
+		isR15 = model:FindFirstChild("UpperTorso") ~= nil
+	end
+
+	local motors: { [string]: Motor6D } = {}
+	local parts: { [string]: BasePart } = {}
+
+	for _, desc in ipairs(model:GetDescendants()) do
+		if desc:IsA("Motor6D") then
+			motors[desc.Name] = desc
+		elseif desc:IsA("BasePart") then
+			parts[desc.Name] = desc
+		end
+	end
+
+	return {
+		model = model,
+		isR15 = isR15,
+		rootPart = rootPart,
+		motors = motors,
+		parts = parts
+	}
+end
+
+-- ── 5. Solve Limb IK on R15 / R6 Rig ──────────────────────────────────────────
+function Kinematics.solveLimb(
+	rigInfo: RigInfo,
+	limbName: string, -- "LeftArm" | "RightArm" | "LeftLeg" | "RightLeg"
+	targetWorldPos: Vector3,
+	poleWorldPos: Vector3?,
+	applyToRig: boolean?
+): { [string]: CFrame }?
+	local m = rigInfo.motors
+	local p = rigInfo.parts
+
+	if rigInfo.isR15 then
+		local upperMotorName, lowerMotorName, endMotorName
+		local upperPartName, lowerPartName, endPartName
+		local defaultPoleOffset = Vector3.new(0, 0, -2)
+
+		if limbName == "LeftArm" then
+			upperMotorName, lowerMotorName, endMotorName = "LeftShoulder", "LeftElbow", "LeftWrist"
+			upperPartName, lowerPartName, endPartName = "LeftUpperArm", "LeftLowerArm", "LeftHand"
+			defaultPoleOffset = Vector3.new(-1, 0, -2)
+		elseif limbName == "RightArm" then
+			upperMotorName, lowerMotorName, endMotorName = "RightShoulder", "RightElbow", "RightWrist"
+			upperPartName, lowerPartName, endPartName = "RightUpperArm", "RightLowerArm", "RightHand"
+			defaultPoleOffset = Vector3.new(1, 0, -2)
+		elseif limbName == "LeftLeg" then
+			upperMotorName, lowerMotorName, endMotorName = "LeftHip", "LeftKnee", "LeftAnkle"
+			upperPartName, lowerPartName, endPartName = "LeftUpperLeg", "LeftLowerLeg", "LeftFoot"
+			defaultPoleOffset = Vector3.new(0, 0, 2)
+		elseif limbName == "RightLeg" then
+			upperMotorName, lowerMotorName, endMotorName = "RightHip", "RightKnee", "RightAnkle"
+			upperPartName, lowerPartName, endPartName = "RightUpperLeg", "RightLowerLeg", "RightFoot"
+			defaultPoleOffset = Vector3.new(0, 0, 2)
+		else
+			return nil
+		end
+
+		local upperMotor = m[upperMotorName]
+		local lowerMotor = m[lowerMotorName]
+		local upperPart = p[upperPartName]
+		local lowerPart = p[lowerPartName]
+		local endPart = p[endPartName]
+
+		if not upperMotor or not lowerMotor or not upperPart or not lowerPart or not endPart then
+			return nil
+		end
+
+		local rootPos = upperPart.Position
+		local midPos = lowerPart.Position
+		local tipPos = endPart.Position
+		local pole = poleWorldPos or (midPos + defaultPoleOffset)
+
+		local solvedMid, solvedTip = Kinematics.solveTwoLink(rootPos, midPos, tipPos, targetWorldPos, pole, 90)
+
+		-- Hitung C0 baru untuk upper dan lower
+		local upperParentCF = upperMotor.Part0.CFrame
+		local upperGoalWorldCF = CFrame.lookAt(rootPos, solvedMid, pole - rootPos)
+		local upperC0 = upperParentCF:Inverse() * upperGoalWorldCF * upperMotor.C1
+
+		local lowerParentCF = solvedMid ~= rootPos and CFrame.lookAt(rootPos, solvedMid) or upperPart.CFrame
+		local lowerGoalWorldCF = CFrame.lookAt(solvedMid, solvedTip, pole - solvedMid)
+		local lowerC0 = lowerParentCF:Inverse() * lowerGoalWorldCF * lowerMotor.C1
+
+		if applyToRig then
+			upperMotor.C0 = upperC0
+			lowerMotor.C0 = lowerC0
+		end
+
+		return {
+			[upperMotorName] = upperC0,
+			[lowerMotorName] = lowerC0
+		}
+	else
+		-- Mode R6: 1 bone per limb, arahkan ke targetWorldPos
+		local motorName, partName
+		if limbName == "LeftArm" then motorName, partName = "Left Shoulder", "Left Arm"
+		elseif limbName == "RightArm" then motorName, partName = "Right Shoulder", "Right Arm"
+		elseif limbName == "LeftLeg" then motorName, partName = "Left Hip", "Left Leg"
+		elseif limbName == "RightLeg" then motorName, partName = "Right Hip", "Right Leg"
+		else return nil end
+
+		local motor = m[motorName]
+		local part = p[partName]
+		if not motor or not part or not motor.Part0 then return nil end
+
+		local rootPos = part.Position
+		local goalCF = CFrame.lookAt(rootPos, targetWorldPos)
+		local c0 = motor.Part0.CFrame:Inverse() * goalCF * motor.C1
+
+		if applyToRig then
+			motor.C0 = c0
+		end
+		return { [motorName] = c0 }
+	end
+end
+
+-- ── 6. Head Look-At Stabilizer ────────────────────────────────────────────────
+function Kinematics.solveLookAt(rigInfo: RigInfo, targetWorldPos: Vector3, applyToRig: boolean?): CFrame?
+	local neckMotor = rigInfo.motors["Neck"]
+	local headPart = rigInfo.parts["Head"]
+	if not neckMotor or not headPart or not neckMotor.Part0 then return nil end
+
+	local headPos = headPart.Position
+	local lookDir = (targetWorldPos - headPos).Unit
+	local targetWorldCF = CFrame.lookAt(headPos, headPos + lookDir)
+	local neckC0 = neckMotor.Part0.CFrame:Inverse() * targetWorldCF * neckMotor.C1
+
+	if applyToRig then
+		neckMotor.C0 = neckC0
+	end
+	return neckC0
+end
+
+return Kinematics
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_nv_motion_generator">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">nv_motion_generator</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- NVStudio Subsystem: nv_motion_generator
+-- Deskripsi: Generator Gerakan Karakter Alami (Human-like Motion Synthesis)
+-- Menghasilkan pose kunci realistis (Anticipation, Follow-through, Easing)
+-- untuk berjalan, berlari, tebasan pedang, tinju, idle, dan lompat.
+-- ══════════════════════════════════════════════════════════════════════
+
+local curvesMod = script.Parent:WaitForChild("nv_curves")
+local Curves = require(curvesMod)
+local kinematicsMod = script.Parent:WaitForChild("nv_kinematics")
+local Kinematics = require(kinematicsMod)
+
+local MotionGenerator = {}
+
+export type KeyframeData = {
+	time: number, -- 0.0 to duration
+	poses: { [string]: CFrame } -- motorName -> C0 CFrame
+}
+
+-- ── Helper Angles ─────────────────────────────────────────────────────────────
+local function anglesDeg(x: number, y: number, z: number): CFrame
+	return CFrame.Angles(math.rad(x), math.rad(y), math.rad(z))
+end
+
+-- ── 1. Generator: Walk Cycle ──────────────────────────────────────────────────
+function MotionGenerator.generateWalkCycle(rigInfo: Kinematics.RigInfo, options: { [string]: any }?): { KeyframeData }
+	local opts = options or {}
+	local duration = tonumber(opts.duration) or 1.0
+	local intensity = tonumber(opts.intensity) or 1.0
+	local isR15 = rigInfo.isR15
+
+	-- Base offsets per motor
+	local m = rigInfo.motors
+	local defaultC0 = {}
+	for name, motor in pairs(m) do
+		defaultC0[name] = motor.C0
+	end
+
+	local legAngle = 26 * intensity
+	local armAngle = 22 * intensity
+	local torsoBob = 0.12 * intensity
+	local torsoTwist = 6 * intensity
+
+	local kfTimes = { 0.0, 0.25, 0.50, 0.75, 1.0 }
+	local keyframes: { KeyframeData } = {}
+
+	for _, tFrac in ipairs(kfTimes) do
+		local tSec = tFrac * duration
+		local poses: { [string]: CFrame } = {}
+
+		if isR15 then
+			local legPhase = math.sin(tFrac * math.pi * 2)
+			local armPhase = -legPhase
+
+			-- Torso movement (vertical bounce on each step)
+			local bobY = math.abs(math.cos(tFrac * math.pi * 2)) * torsoBob
+			local rootC0 = defaultC0["Root"] or CFrame.identity
+			poses["Root"] = rootC0 * CFrame.new(0, -bobY, 0) * anglesDeg(4, legPhase * torsoTwist, 0)
+
+			-- Left Leg & Right Leg
+			local lHip = defaultC0["LeftHip"] or CFrame.identity
+			local rHip = defaultC0["RightHip"] or CFrame.identity
+			local lKnee = defaultC0["LeftKnee"] or CFrame.identity
+			local rKnee = defaultC0["RightKnee"] or CFrame.identity
+
+			poses["LeftHip"] = lHip * anglesDeg(legPhase * legAngle, 0, 0)
+			poses["RightHip"] = rHip * anglesDeg(-legPhase * legAngle, 0, 0)
+
+			-- Knee bends when leg swings back
+			local lKneeBend = math.clamp(-legPhase * legAngle * 1.5, 0, 45)
+			local rKneeBend = math.clamp(legPhase * legAngle * 1.5, 0, 45)
+			poses["LeftKnee"] = lKnee * anglesDeg(lKneeBend, 0, 0)
+			poses["RightKnee"] = rKnee * anglesDeg(rKneeBend, 0, 0)
+
+			-- Left Arm & Right Arm (opposite to legs)
+			local lShoulder = defaultC0["LeftShoulder"] or CFrame.identity
+			local rShoulder = defaultC0["RightShoulder"] or CFrame.identity
+			poses["LeftShoulder"] = lShoulder * anglesDeg(armPhase * armAngle, 0, -4)
+			poses["RightShoulder"] = rShoulder * anglesDeg(-armPhase * armAngle, 0, 4)
+		else
+			-- R6 Rig
+			local legPhase = math.sin(tFrac * math.pi * 2)
+			local armPhase = -legPhase
+
+			local lShoulder = defaultC0["Left Shoulder"] or CFrame.identity
+			local rShoulder = defaultC0["Right Shoulder"] or CFrame.identity
+			local lHip = defaultC0["Left Hip"] or CFrame.identity
+			local rHip = defaultC0["Right Hip"] or CFrame.identity
+
+			poses["Left Shoulder"] = lShoulder * anglesDeg(armPhase * armAngle, 0, 0)
+			poses["Right Shoulder"] = rShoulder * anglesDeg(-armPhase * armAngle, 0, 0)
+			poses["Left Hip"] = lHip * anglesDeg(legPhase * legAngle, 0, 0)
+			poses["Right Hip"] = rHip * anglesDeg(-legPhase * legAngle, 0, 0)
+		end
+
+		table.insert(keyframes, { time = tSec, poses = poses })
+	end
+
+	return keyframes
+end
+
+-- ── 2. Generator: Melee Slash (Combat Attack) ─────────────────────────────────
+function MotionGenerator.generateMeleeSlash(rigInfo: Kinematics.RigInfo, options: { [string]: any }?): { KeyframeData }
+	local opts = options or {}
+	local duration = tonumber(opts.duration) or 0.8
+	local isR15 = rigInfo.isR15
+
+	local defaultC0 = {}
+	for name, motor in pairs(rigInfo.motors) do
+		defaultC0[name] = motor.C0
+	end
+
+	-- Keyframes: 0 (Ready), 0.25 (Wind-up Anticipation), 0.50 (Slash Snap), 0.75 (Follow-Through), 1.0 (Recover)
+	local points = {
+		{
+			t = 0.0,
+			armRot = anglesDeg(10, 0, 5),
+			torsoRot = anglesDeg(0, 0, 0),
+			lArmRot = anglesDeg(5, 0, -5)
+		},
+		{
+			t = 0.25, -- Wind-up
+			armRot = anglesDeg(-110, -35, 40),
+			torsoRot = anglesDeg(-5, -25, 0),
+			lArmRot = anglesDeg(20, 15, -15)
+		},
+		{
+			t = 0.50, -- Slash Strike
+			armRot = anglesDeg(65, 30, -25),
+			torsoRot = anglesDeg(10, 35, 0),
+			lArmRot = anglesDeg(-25, -10, -20)
+		},
+		{
+			t = 0.75, -- Follow-through overshoot
+			armRot = anglesDeg(75, 40, -30),
+			torsoRot = anglesDeg(8, 40, 0),
+			lArmRot = anglesDeg(-15, -5, -15)
+		},
+		{
+			t = 1.0, -- Return
+			armRot = anglesDeg(10, 0, 5),
+			torsoRot = anglesDeg(0, 0, 0),
+			lArmRot = anglesDeg(5, 0, -5)
+		}
+	}
+
+	local keyframes: { KeyframeData } = {}
+	for _, pt in ipairs(points) do
+		local poses: { [string]: CFrame } = {}
+		if isR15 then
+			poses["RightShoulder"] = (defaultC0["RightShoulder"] or CFrame.identity) * pt.armRot
+			poses["LeftShoulder"] = (defaultC0["LeftShoulder"] or CFrame.identity) * pt.lArmRot
+			poses["Waist"] = (defaultC0["Waist"] or CFrame.identity) * pt.torsoRot
+		else
+			poses["Right Shoulder"] = (defaultC0["Right Shoulder"] or CFrame.identity) * pt.armRot
+			poses["Left Shoulder"] = (defaultC0["Left Shoulder"] or CFrame.identity) * pt.lArmRot
+			poses["RootJoint"] = (defaultC0["RootJoint"] or CFrame.identity) * pt.torsoRot
+		end
+		table.insert(keyframes, { time = pt.t * duration, poses = poses })
+	end
+
+	return keyframes
+end
+
+-- ── 3. Generator: Punch Combo ─────────────────────────────────────────────────
+function MotionGenerator.generatePunch(rigInfo: Kinematics.RigInfo, options: { [string]: any }?): { KeyframeData }
+	local opts = options or {}
+	local duration = tonumber(opts.duration) or 0.6
+	local isR15 = rigInfo.isR15
+
+	local defaultC0 = {}
+	for name, motor in pairs(rigInfo.motors) do
+		defaultC0[name] = motor.C0
+	end
+
+	local points = {
+		{ t = 0.0, rArm = anglesDeg(0, 0, 0), torso = anglesDeg(0, 0, 0) },
+		{ t = 0.2, rArm = anglesDeg(-20, -10, 15), torso = anglesDeg(0, -15, 0) }, -- Coil back
+		{ t = 0.45, rArm = anglesDeg(90, 10, -5), torso = anglesDeg(8, 25, 0) },   -- Thrust forward
+		{ t = 0.7, rArm = anglesDeg(70, 5, -2), torso = anglesDeg(4, 15, 0) },     -- Recoil
+		{ t = 1.0, rArm = anglesDeg(0, 0, 0), torso = anglesDeg(0, 0, 0) }
+	}
+
+	local keyframes: { KeyframeData } = {}
+	for _, pt in ipairs(points) do
+		local poses: { [string]: CFrame } = {}
+		if isR15 then
+			poses["RightShoulder"] = (defaultC0["RightShoulder"] or CFrame.identity) * pt.rArm
+			poses["Waist"] = (defaultC0["Waist"] or CFrame.identity) * pt.torso
+		else
+			poses["Right Shoulder"] = (defaultC0["Right Shoulder"] or CFrame.identity) * pt.rArm
+			poses["RootJoint"] = (defaultC0["RootJoint"] or CFrame.identity) * pt.torso
+		end
+		table.insert(keyframes, { time = pt.t * duration, poses = poses })
+	end
+
+	return keyframes
+end
+
+-- ── 4. Generator: Idle Breathing ──────────────────────────────────────────────
+function MotionGenerator.generateIdle(rigInfo: Kinematics.RigInfo, options: { [string]: any }?): { KeyframeData }
+	local opts = options or {}
+	local duration = tonumber(opts.duration) or 2.5
+	local isR15 = rigInfo.isR15
+
+	local defaultC0 = {}
+	for name, motor in pairs(rigInfo.motors) do
+		defaultC0[name] = motor.C0
+	end
+
+	local keyframes: { KeyframeData } = {}
+	local steps = 8
+	for i = 0, steps do
+		local frac = i / steps
+		local timeSec = frac * duration
+		local breathCycle = math.sin(frac * math.pi * 2)
+
+		local poses: { [string]: CFrame } = {}
+		if isR15 then
+			poses["Root"] = (defaultC0["Root"] or CFrame.identity) * CFrame.new(0, breathCycle * 0.04, 0)
+			poses["Waist"] = (defaultC0["Waist"] or CFrame.identity) * anglesDeg(breathCycle * 1.5, 0, 0)
+			poses["Neck"] = (defaultC0["Neck"] or CFrame.identity) * anglesDeg(-breathCycle * 1.0, 0, 0)
+		else
+			poses["RootJoint"] = (defaultC0["RootJoint"] or CFrame.identity) * CFrame.new(0, 0, breathCycle * 0.04)
+			poses["Neck"] = (defaultC0["Neck"] or CFrame.identity) * anglesDeg(-breathCycle * 1.2, 0, 0)
+		end
+
+		table.insert(keyframes, { time = timeSec, poses = poses })
+	end
+
+	return keyframes
+end
+
+-- ── 5. Dense Sampler: Interpolasi Keyframes Menggunakan SLERP & Easing ────────
+function MotionGenerator.sampleSequence(
+	keyframes: { KeyframeData },
+	fps: number,
+	easing: string?
+): { [number]: { [string]: CFrame } }
+	if #keyframes == 0 then return {} end
+	table.sort(keyframes, function(a, b) return a.time < b.time end)
+
+	local totalDuration = keyframes[#keyframes].time
+	local totalFrames = math.max(1, math.floor(totalDuration * fps))
+	local sampled: { [number]: { [string]: CFrame } } = {}
+
+	for f = 0, totalFrames do
+		local curTime = (f / totalFrames) * totalDuration
+
+		-- Cari segment keyframe [prev, next]
+		local kA = keyframes[1]
+		local kB = keyframes[#keyframes]
+		for i = 1, #keyframes - 1 do
+			if curTime >= keyframes[i].time and curTime <= keyframes[i + 1].time then
+				kA = keyframes[i]
+				kB = keyframes[i + 1]
+				break
+			end
+		end
+
+		local segDuration = kB.time - kA.time
+		local rawAlpha = segDuration > 1e-5 and ((curTime - kA.time) / segDuration) or 0
+		local curvedAlpha = Curves.evaluate(easing or "QuadInOut", rawAlpha)
+
+		local framePoses: { [string]: CFrame } = {}
+		for motorName, cfA in pairs(kA.poses) do
+			local cfB = kB.poses[motorName] or cfA
+			framePoses[motorName] = Curves.slerp(cfA, cfB, curvedAlpha)
+		end
+
+		sampled[f] = framePoses
+	end
+
+	return sampled
+end
+
+return MotionGenerator
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_nv_rig_dispatcher">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">nv_rig_dispatcher</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- NVStudio Subsystem: nv_rig_dispatcher
+-- Deskripsi: Headless Modular Command Dispatcher untuk NV-Rig Engine
+-- Mengelola routing perintah rigging dari AI Agent LLM, eksekusi
+-- deterministik, inspeksi topologi rig, dan diagnostik otomatis.
+-- ══════════════════════════════════════════════════════════════════════
+
+local jointMathMod = script.Parent:WaitForChild("nv_joint_math")
+local JointMath = require(jointMathMod)
+local autoRiggerMod = script.Parent:WaitForChild("nv_auto_rigger")
+local AutoRigger = require(autoRiggerMod)
+
+local Dispatcher = {}
+
+-- ── 1. Inspeksi & Diagnostik Rig Mendalam (Deep Topological Inspection) ────────
+function Dispatcher.inspectRig(targetInstance: Instance): { [string]: any }
+	if not targetInstance then
+		return { status = "error", error = "Target instance tidak ditemukan." }
+	end
+
+	local model = targetInstance:IsA("Model") and targetInstance or targetInstance:FindFirstAncestorOfClass("Model")
+	if not model then
+		model = targetInstance:IsA("Folder") and targetInstance or targetInstance:IsA("BasePart") and targetInstance.Parent :: any
+	end
+	if not model then
+		return { status = "error", error = "Target harus berada di dalam Model atau Folder." }
+	end
+
+	local parts: { [string]: { anchored: boolean, size: { number }, mass: number, className: string } } = {}
+	local joints: { any } = {}
+	local parentToChildren: { [string]: { string } } = {}
+	local childToParent: { [string]: string } = {}
+	local rootCandidates: { string } = {}
+	local anchoredCount = 0
+	local totalParts = 0
+
+	for _, desc in ipairs(model:GetDescendants()) do
+		if desc:IsA("BasePart") then
+			totalParts += 1
+			if desc.Anchored then anchoredCount += 1 end
+			parts[desc.Name] = {
+				anchored = desc.Anchored,
+				size = { desc.Size.X, desc.Size.Y, desc.Size.Z },
+				mass = desc:GetMass(),
+				className = desc.ClassName
+			}
+		elseif desc:IsA("Motor6D") or desc:IsA("Weld") then
+			local p0Name = desc.Part0 and desc.Part0.Name or "nil"
+			local p1Name = desc.Part1 and desc.Part1.Name or "nil"
+			local pivotWorld = JointMath.getJointWorldPosition(desc)
+
+			table.insert(joints, {
+				name = desc.Name,
+				type = desc.ClassName,
+				part0 = p0Name,
+				part1 = p1Name,
+				parent = desc.Parent and desc.Parent.Name or "nil",
+				pivotWorld = pivotWorld and { pivotWorld.X, pivotWorld.Y, pivotWorld.Z } or nil,
+				c0 = { desc.C0:GetComponents() },
+				c1 = { desc.C1:GetComponents() }
+			})
+
+			if p0Name ~= "nil" and p1Name ~= "nil" then
+				if not parentToChildren[p0Name] then parentToChildren[p0Name] = {} end
+				table.insert(parentToChildren[p0Name], p1Name)
+				childToParent[p1Name] = p0Name
+			end
+		end
+	end
+
+	-- Deteksi Root Part (Part yang tidak memiliki Part0 di atasnya)
+	for partName, _ in pairs(parts) do
+		if not childToParent[partName] then
+			table.insert(rootCandidates, partName)
+		end
+	end
+
+	-- Deteksi Loop / Circular Dependency dalam hierarki
+	local hasCycle = false
+	local cyclePath = ""
+	local visited: { [string]: boolean } = {}
+	local recStack: { [string]: boolean } = {}
+
+	local function checkCycle(node: string, path: string): boolean
+		visited[node] = true
+		recStack[node] = true
+		local children = parentToChildren[node] or {}
+		for _, child in ipairs(children) do
+			if not visited[child] then
+				if checkCycle(child, path .. " -> " .. child) then return true end
+			elseif recStack[child] then
+				cyclePath = path .. " -> " .. child
+				return true
+			end
+		end
+		recStack[node] = false
+		return false
+	end
+
+	for _, root in ipairs(rootCandidates) do
+		if checkCycle(root, root) then
+			hasCycle = true
+			break
+		end
+	end
+
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	local rigType = humanoid and (humanoid.RigType == Enum.HumanoidRigType.R15 and "R15" or "R6") or "Custom"
+
+	local warnings: { string } = {}
+	if hasCycle then
+		table.insert(warnings, "Ditemukan siklus tertutup (Circular Dependency): " .. cyclePath)
+	end
+	if anchoredCount > 1 then
+		table.insert(warnings, string.format("Ada %d part yang masih 'Anchored = true'. Karakter mungkin tidak dapat bergerak/beranimasi.", anchoredCount))
+	end
+	if #rootCandidates > 1 then
+		table.insert(warnings, "Ditemukan lebih dari 1 calon root part: " .. table.concat(rootCandidates, ", "))
+	end
+
+	return {
+		status = "success",
+		modelName = model.Name,
+		rigType = rigType,
+		totalParts = totalParts,
+		totalJoints = #joints,
+		rootParts = rootCandidates,
+		hasCycle = hasCycle,
+		warnings = warnings,
+		joints = joints,
+		parts = parts
+	}
+end
+
+-- ── 2. Buat Sambungan Sendi Baru (Create Joint / Weld) ─────────────────────────
+function Dispatcher.createJoint(targetModel: Instance, params: { [string]: any }): { [string]: any }
+	local part0Name = params.part0
+	local part1Name = params.part1
+	local jointType = params.joint_type or "Motor6D"
+	local jointName = params.name
+
+	if not part0Name or not part1Name then
+		return { status = "error", error = "Parameter 'part0' dan 'part1' wajib disertakan." }
+	end
+
+	local part0 = targetModel:FindFirstChild(part0Name, true) :: BasePart?
+	local part1 = targetModel:FindFirstChild(part1Name, true) :: BasePart?
+
+	if not part0 or not part0:IsA("BasePart") then
+		return { status = "error", error = "Part0 '" .. tostring(part0Name) .. "' tidak ditemukan." }
+	end
+	if not part1 or not part1:IsA("BasePart") then
+		return { status = "error", error = "Part1 '" .. tostring(part1Name) .. "' tidak ditemukan." }
+	end
+
+	part1.Anchored = false
+	local joint: JointInstance
+	if jointType == "Weld" then
+		joint = Instance.new("Weld")
+	else
+		joint = Instance.new("Motor6D")
+	end
+
+	joint.Name = jointName or (jointType == "Motor6D" and part1.Name or (part0.Name .. "_" .. part1.Name))
+	joint.Part0 = part0
+	joint.Part1 = part1
+	local c0, c1 = JointMath.computeInitialOffsets(part0, part1)
+	joint.C0 = c0
+	joint.C1 = c1
+	joint.Parent = part0
+
+	return {
+		status = "success",
+		jointName = joint.Name,
+		jointType = joint.ClassName,
+		part0 = part0.Name,
+		part1 = part1.Name,
+		message = string.format("Berhasil membuat %s '%s' antara '%s' dan '%s'", joint.ClassName, joint.Name, part0.Name, part1.Name)
+	}
+end
+
+-- ── 3. Edit Poros Sendi (Offset World / Target Position) ───────────────────────
+function Dispatcher.editPivot(targetModel: Instance, params: { [string]: any }): { [string]: any }
+	local jointName = params.joint_name or params.name
+	if not jointName then
+		return { status = "error", error = "Parameter 'joint_name' wajib diisi." }
+	end
+
+	local joint: JointInstance? = nil
+	for _, desc in ipairs(targetModel:GetDescendants()) do
+		if (desc:IsA("Motor6D") or desc:IsA("Weld")) and desc.Name == jointName then
+			joint = desc
+			break
+		end
+	end
+
+	if not joint then
+		return { status = "error", error = "Joint '" .. tostring(jointName) .. "' tidak ditemukan pada model." }
+	end
+
+	local success = false
+	if params.delta_world and type(params.delta_world) == "table" and #params.delta_world >= 3 then
+		local d = params.delta_world
+		success = JointMath.offsetPivot(joint, Vector3.new(d[1], d[2], d[3]))
+	elseif params.target_world and type(params.target_world) == "table" and #params.target_world >= 3 then
+		local p = params.target_world
+		success = JointMath.setPivotWorld(joint, Vector3.new(p[1], p[2], p[3]))
+	elseif params.rotate_euler_deg and type(params.rotate_euler_deg) == "table" and #params.rotate_euler_deg >= 3 then
+		local r = params.rotate_euler_deg
+		local rad = Vector3.new(math.rad(r[1]), math.rad(r[2]), math.rad(r[3]))
+		success = JointMath.rotatePivot(joint, rad)
+	elseif params.reset == true then
+		success = JointMath.resetPivot(joint)
+	elseif params.align_to == "Part0" or params.align_to == "Part1" then
+		success = JointMath.alignJoint(joint, params.align_to)
+	else
+		return { status = "error", error = "Tindakan edit pivot tidak spesifik. Berikan delta_world, target_world, rotate_euler_deg, reset, atau align_to." }
+	end
+
+	if not success then
+		return { status = "error", error = "Gagal memodifikasi poros sendi '" .. jointName .. "'." }
+	end
+
+	local newPivot = JointMath.getJointWorldPosition(joint)
+	return {
+		status = "success",
+		jointName = joint.Name,
+		newPivotWorld = newPivot and { newPivot.X, newPivot.Y, newPivot.Z } or nil,
+		newC0 = { joint.C0:GetComponents() },
+		newC1 = { joint.C1:GetComponents() },
+		message = "Poros sendi '" .. joint.Name .. "' berhasil diperbarui tanpa dislokasi part."
+	}
+end
+
+-- ── 4. Cerminkan Sendi Simetri Bilateral (Mirror Joints) ──────────────────────
+function Dispatcher.mirrorJoints(targetModel: Instance, params: { [string]: any }): { [string]: any }
+	local sourceSide = params.source_side or "Left"
+	local targetSide = sourceSide == "Left" and "Right" or "Left"
+
+	local mirroredCount = 0
+	local pairsProcessed: { string } = {}
+
+	for _, desc in ipairs(targetModel:GetDescendants()) do
+		if desc:IsA("Motor6D") or desc:IsA("Weld") then
+			if string.find(desc.Name, sourceSide) then
+				local targetName = string.gsub(desc.Name, sourceSide, targetSide)
+				local targetJoint: JointInstance? = nil
+				for _, d2 in ipairs(targetModel:GetDescendants()) do
+					if (d2:IsA("Motor6D") or d2:IsA("Weld")) and d2.Name == targetName then
+						targetJoint = d2
+						break
+					end
+				end
+
+				if targetJoint then
+					JointMath.mirrorJoint(desc, targetJoint)
+					mirroredCount += 1
+					table.insert(pairsProcessed, desc.Name .. " -> " .. targetName)
+				end
+			end
+		end
+	end
+
+	return {
+		status = "success",
+		sourceSide = sourceSide,
+		targetSide = targetSide,
+		mirroredCount = mirroredCount,
+		pairs = pairsProcessed,
+		message = string.format("Berhasil mencerminkan %d sendi dari %s ke %s", mirroredCount, sourceSide, targetSide)
+	}
+end
+
+-- ── 5. Router Eksekusi Utama (Modular Dispatcher) ─────────────────────────────
+function Dispatcher.dispatch(targetInstance: Instance, action: string, data: { [string]: any }): { [string]: any }
+	if action == "inspect" then
+		return Dispatcher.inspectRig(targetInstance)
+	elseif action == "create_joint" or action == "create" then
+		return Dispatcher.createJoint(targetInstance, data)
+	elseif action == "create_weld" then
+		data.joint_type = "Weld"
+		return Dispatcher.createJoint(targetInstance, data)
+	elseif action == "edit_pivot" or action == "edit" or action == "move_pivot" or action == "rotate_pivot" or action == "reset_pivot" or action == "align_joint" then
+		return Dispatcher.editPivot(targetInstance, data)
+	elseif action == "mirror" or action == "mirror_joints" then
+		return Dispatcher.mirrorJoints(targetInstance, data)
+	elseif action == "auto_rig_r6" or action == "rig_r6" then
+		return AutoRigger.rigR6(targetInstance:IsA("Model") and targetInstance or targetInstance:FindFirstAncestorOfClass("Model") :: any)
+	elseif action == "auto_rig_r15" or action == "rig_r15" then
+		return AutoRigger.rigR15(targetInstance:IsA("Model") and targetInstance or targetInstance:FindFirstAncestorOfClass("Model") :: any)
+	elseif action == "rig_weapon" or action == "attach_weapon" then
+		local weapon = data.weapon_path and game:GetService("HttpService") -- akan di-resolve oleh caller jika ada path
+		return AutoRigger.rigWeapon(targetInstance:IsA("Model") and targetInstance or targetInstance:FindFirstAncestorOfClass("Model") :: any, targetInstance, data.target_limb)
+	elseif action == "weld_assembly" or action == "weld_all" then
+		return AutoRigger.weldAssembly(targetInstance, nil)
+	elseif action == "remove_joint" or action == "delete_joint" then
+		local jointName = data.joint_name or data.name
+		local removed = 0
+		for _, desc in ipairs(targetInstance:GetDescendants()) do
+			if (desc:IsA("Motor6D") or desc:IsA("Weld")) and (not jointName or desc.Name == jointName) then
+				if data.reanchor == true and desc.Part1 then
+					desc.Part1.Anchored = true
+				end
+				desc:Destroy()
+				removed += 1
+			end
+		end
+		return { status = "success", removedCount = removed, message = string.format("Berhasil menghapus %d joint", removed) }
+	else
+		return {
+			status = "error",
+			error = "Action tidak dikenal: '" .. tostring(action) .. "'. Pilihan: inspect, create_joint, create_weld, edit_pivot, auto_rig_r6, auto_rig_r15, weld_assembly, mirror_joints, remove_joint."
+		}
+	end
+end
+
+return Dispatcher
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_nv_vfx_serializer">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">nv_vfx_serializer</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- NVStudio Subsystem: nv_vfx_serializer
+-- Deskripsi: Serializer & Deserializer 1:1 Efek Visual Roblox
+-- Mengonversi seluruh properti ParticleEmitter, Beam, Trail, Light,
+-- dan Attachment menjadi tabel data murni (JSON-safe) dan merekonstruksinya
+-- dengan fidelitas 100% pada proyek Roblox mana saja.
+-- ══════════════════════════════════════════════════════════════════════
+
+local Serializer = {}
+
+-- ── 1. Property Whitelist Per ClassName ───────────────────────────────────────
+local PROPERTY_WHITELISTS: { [string]: { string } } = {
+	ParticleEmitter = {
+		"Name", "Enabled", "Texture", "Color", "Size", "Transparency",
+		"Acceleration", "Drag", "EmissionDirection", "Lifetime",
+		"LightEmission", "LightInfluence", "Orientation", "Rate",
+		"RotSpeed", "Rotation", "Shape", "ShapeInOut", "ShapePartial",
+		"ShapeStyle", "Speed", "SpreadAngle", "Squash",
+		"FlipbookFramerate", "FlipbookLayout", "FlipbookMode", "FlipbookStartRandom",
+		"ZOffset", "Brightness", "TimeScale", "VelocityInheritance", "WindAffects"
+	},
+	Beam = {
+		"Name", "Enabled", "Attachment0", "Attachment1", "Color",
+		"CurveSize0", "CurveSize1", "FaceCamera", "LightEmission",
+		"LightInfluence", "Segments", "Texture", "TextureLength",
+		"TextureMode", "TextureSpeed", "Transparency", "Width0",
+		"Width1", "ZOffset", "Brightness"
+	},
+	Trail = {
+		"Name", "Enabled", "Attachment0", "Attachment1", "Color",
+		"FaceCamera", "LightEmission", "LightInfluence", "Lifetime",
+		"MaxLength", "MinLength", "Texture", "TextureLength",
+		"TextureMode", "Transparency", "WidthScale", "Brightness"
+	},
+	Attachment = {
+		"Name", "Visible", "CFrame"
+	},
+	PointLight = {
+		"Name", "Enabled", "Brightness", "Color", "Range", "Shadows"
+	},
+	SpotLight = {
+		"Name", "Enabled", "Brightness", "Color", "Range", "Shadows", "Angle", "Face"
+	},
+	SurfaceLight = {
+		"Name", "Enabled", "Brightness", "Color", "Range", "Shadows", "Face"
+	},
+	Highlight = {
+		"Name", "Enabled", "FillColor", "OutlineColor", "FillTransparency", "OutlineTransparency", "DepthMode"
+	}
+}
+
+-- ── 2. Helper: Encode Roblox Values ke Pure Table ─────────────────────────────
+local function encodeValue(val: any, nodeIndexMap: { [Instance]: number }): any
+	local valType = typeof(val)
+
+	if valType == "nil" or valType == "string" or valType == "number" or valType == "boolean" then
+		return val
+	elseif valType == "Vector3" then
+		return { t = "Vector3", v = { val.X, val.Y, val.Z } }
+	elseif valType == "Vector2" then
+		return { t = "Vector2", v = { val.X, val.Y } }
+	elseif valType == "CFrame" then
+		return { t = "CFrame", v = { val:GetComponents() } }
+	elseif valType == "Color3" then
+		return { t = "Color3", v = { val.R, val.G, val.B } }
+	elseif valType == "NumberRange" then
+		return { t = "NumberRange", v = { val.Min, val.Max } }
+	elseif valType == "NumberSequence" then
+		local kps = {}
+		for _, kp in ipairs(val.Keypoints) do
+			table.insert(kps, { kp.Time, kp.Value, kp.Envelope })
+		end
+		return { t = "NumberSequence", v = kps }
+	elseif valType == "ColorSequence" then
+		local kps = {}
+		for _, kp in ipairs(val.Keypoints) do
+			table.insert(kps, {
+				kp.Time,
+				{ t = "Color3", v = { kp.Value.R, kp.Value.G, kp.Value.B } }
+			})
+		end
+		return { t = "ColorSequence", v = kps }
+	elseif valType == "EnumItem" then
+		return { t = "EnumItem", e = tostring(val.EnumType), v = val.Name }
+	elseif valType == "Instance" then
+		local idx = nodeIndexMap[val]
+		if idx then
+			return { t = "Ref", v = idx }
+		end
+		return { t = "InstanceName", v = val.Name }
+	end
+
+	return tostring(val)
+end
+
+-- ── 3. Helper: Decode Pure Table ke Roblox Values ──────────────────────────────
+local function decodeValue(val: any, createdNodes: { [number]: Instance }, scale: number?): any
+	if type(val) ~= "table" or not val.t then
+		return val
+	end
+
+	local t = val.t
+	local v = val.v
+	local s = scale or 1
+
+	if t == "Vector3" then
+		return Vector3.new(v[1] * s, v[2] * s, v[3] * s)
+	elseif t == "Vector2" then
+		return Vector2.new(v[1], v[2])
+	elseif t == "CFrame" then
+		local c = v
+		if s ~= 1 then
+			return CFrame.new(c[1] * s, c[2] * s, c[3] * s, c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12])
+		end
+		return CFrame.new(table.unpack(c))
+	elseif t == "Color3" then
+		return Color3.new(v[1], v[2], v[3])
+	elseif t == "NumberRange" then
+		local minV = tonumber(v[1]) or 0
+		local maxV = tonumber(v[2]) or minV
+		return NumberRange.new(math.min(minV, maxV), math.max(minV, maxV))
+	elseif t == "NumberSequence" then
+		local kps = {}
+		for _, kp in ipairs(v) do
+			if type(kp) == "table" then
+				local timeVal = math.clamp(tonumber(kp[1]) or 0, 0, 1)
+				local numVal = (tonumber(kp[2]) or 0) * s
+				local envVal = (tonumber(kp[3]) or 0) * s
+				table.insert(kps, NumberSequenceKeypoint.new(timeVal, numVal, envVal))
+			end
+		end
+		if #kps >= 2 then
+			table.sort(kps, function(a, b) return a.Time < b.Time end)
+			if kps[1].Time ~= 0 then
+				kps[1] = NumberSequenceKeypoint.new(0, kps[1].Value, kps[1].Envelope)
+			end
+			if kps[#kps].Time ~= 1 then
+				kps[#kps] = NumberSequenceKeypoint.new(1, kps[#kps].Value, kps[#kps].Envelope)
+			end
+			for i = 2, #kps do
+				if kps[i].Time <= kps[i - 1].Time then
+					local newT = math.min(1.0, kps[i - 1].Time + 0.001)
+					kps[i] = NumberSequenceKeypoint.new(newT, kps[i].Value, kps[i].Envelope)
+				end
+			end
+			return NumberSequence.new(kps)
+		elseif #kps == 1 then
+			return NumberSequence.new(kps[1].Value)
+		end
+		return NumberSequence.new(0)
+	elseif t == "ColorSequence" then
+		local kps = {}
+		for _, kp in ipairs(v) do
+			if type(kp) == "table" and kp[2] then
+				local timeVal = math.clamp(tonumber(kp[1]) or 0, 0, 1)
+				local col = kp[2].v or { 1, 1, 1 }
+				table.insert(kps, ColorSequenceKeypoint.new(timeVal, Color3.new(col[1] or 1, col[2] or 1, col[3] or 1)))
+			end
+		end
+		if #kps >= 2 then
+			table.sort(kps, function(a, b) return a.Time < b.Time end)
+			if kps[1].Time ~= 0 then
+				kps[1] = ColorSequenceKeypoint.new(0, kps[1].Value)
+			end
+			if kps[#kps].Time ~= 1 then
+				kps[#kps] = ColorSequenceKeypoint.new(1, kps[#kps].Value)
+			end
+			for i = 2, #kps do
+				if kps[i].Time <= kps[i - 1].Time then
+					local newT = math.min(1.0, kps[i - 1].Time + 0.001)
+					kps[i] = ColorSequenceKeypoint.new(newT, kps[i].Value)
+				end
+			end
+			return ColorSequence.new(kps)
+		elseif #kps == 1 then
+			return ColorSequence.new(kps[1].Value)
+		end
+		return ColorSequence.new(Color3.new(1, 1, 1))
+	elseif t == "EnumItem" then
+		local enumGroup = Enum[val.e]
+		if enumGroup and enumGroup[v] then
+			return enumGroup[v]
+		end
+		return nil
+	elseif t == "Ref" then
+		return createdNodes[v]
+	end
+
+	return val
+end
+
+-- ── 4. Serializer: Mengonversi Instance Hierarchy Menjadi Pure Table ─────────
+function Serializer.serialize(rootInstance: Instance): { [string]: any }
+	assert(typeof(rootInstance) == "Instance", "Root instance harus berupa Roblox Instance")
+
+	-- Kumpulkan seluruh node VFX yang didukung
+	local rawNodes: { Instance } = {}
+	local nodeIndexMap: { [Instance]: number } = {}
+
+	local function collect(inst: Instance)
+		if PROPERTY_WHITELISTS[inst.ClassName] or inst:IsA("Folder") or inst:IsA("Model") or inst:IsA("Configuration") or inst == rootInstance then
+			table.insert(rawNodes, inst)
+			nodeIndexMap[inst] = #rawNodes
+		end
+		for _, child in ipairs(inst:GetChildren()) do
+			collect(child)
+		end
+	end
+
+	collect(rootInstance)
+
+	local nodes = {}
+	local stats = { emitters = 0, beams = 0, trails = 0, lights = 0 }
+
+	for i, inst in ipairs(rawNodes) do
+		local className = inst.ClassName
+		local parentIndex = nil
+		if inst ~= rootInstance and inst.Parent then
+			parentIndex = nodeIndexMap[inst.Parent]
+		end
+
+		local props = {}
+		local whitelist = PROPERTY_WHITELISTS[className]
+		if whitelist then
+			for _, propName in ipairs(whitelist) do
+				local ok, propVal = pcall(function() return (inst :: any)[propName] end)
+				if ok and propVal ~= nil then
+					props[propName] = encodeValue(propVal, nodeIndexMap)
+				end
+			end
+		else
+			props["Name"] = inst.Name
+		end
+
+		-- Perbarui statistik
+		if className == "ParticleEmitter" then
+			stats.emitters += 1
+		elseif className == "Beam" then
+			stats.beams += 1
+		elseif className == "Trail" then
+			stats.trails += 1
+		elseif className:find("Light") then
+			stats.lights += 1
+		end
+
+		nodes[i] = {
+			class = className,
+			name = inst.Name,
+			parent = parentIndex,
+			properties = props
+		}
+	end
+
+	return {
+		version = 1,
+		rootName = rootInstance.Name,
+		rootClass = rootInstance.ClassName,
+		nodeCount = #nodes,
+		stats = stats,
+		nodes = nodes
+	}
+end
+
+-- ── 5. Deserializer: Merekonstruksi Roblox Instances dari Pure Table ───────────
+function Serializer.deserialize(treeData: { [string]: any }, targetParent: Instance, options: { scale: number?, enabled: boolean? }?): { [string]: any }
+	assert(type(treeData) == "table" and treeData.nodes, "Format data treeData tidak valid")
+	assert(typeof(targetParent) == "Instance", "TargetParent harus berupa Instance")
+
+	local opts = options or {}
+	local scale = tonumber(opts.scale) or 1
+	local createdNodes: { [number]: Instance } = {}
+	local refDeferred: { { inst: Instance, propName: string, refIdx: number } } = {}
+	local errors: { string } = {}
+	local createdCount = 0
+
+	-- Pass 1: Buat semua instance dan tetapkan parent dasar
+	for i, node in ipairs(treeData.nodes) do
+		local ok, inst = pcall(function()
+			-- Jika node pertama adalah root dan bertipe Part/Model pembungkus, kita bisa menaruh isinya langsung
+			if i == 1 and (node.class == "Folder" or node.class == "Model" or node.class == "Configuration") and targetParent:IsA("BasePart") then
+				-- Buat container pembungkus di targetParent
+				local container = Instance.new(node.class)
+				container.Name = node.name or "NV_VFX"
+				container.Parent = targetParent
+				return container
+			elseif i == 1 and (node.class == "ParticleEmitter" or node.class == "Beam" or node.class == "Trail" or node.class == "Attachment") then
+				local newInst = Instance.new(node.class)
+				newInst.Name = node.name or "NV_VFX"
+				newInst.Parent = targetParent
+				return newInst
+			else
+				local newInst = Instance.new(node.class)
+				newInst.Name = node.name or ("Node_" .. tostring(i))
+				return newInst
+			end
+		end)
+
+		if ok and inst then
+			createdNodes[i] = inst
+			createdCount += 1
+		else
+			table.insert(errors, "Gagal membuat instance untuk node " .. tostring(i) .. ": " .. tostring(inst))
+		end
+	end
+
+	-- Pass 2: Hubungkan hierarki Parent
+	for i, node in ipairs(treeData.nodes) do
+		local inst = createdNodes[i]
+		if inst and i > 1 then
+			local parentIdx = node.parent
+			if parentIdx and createdNodes[parentIdx] then
+				inst.Parent = createdNodes[parentIdx]
+			else
+				inst.Parent = createdNodes[1] or targetParent
+			end
+		end
+	end
+
+	-- Pass 3: Terapkan Properti (dengan scaling & deferred Attachment ref)
+	for i, node in ipairs(treeData.nodes) do
+		local inst = createdNodes[i]
+		if inst and node.properties then
+			for propName, propData in pairs(node.properties) do
+				if type(propData) == "table" and propData.t == "Ref" then
+					table.insert(refDeferred, { inst = inst, propName = propName, refIdx = propData.v })
+				else
+					local pScale = (propName == "Size" or propName == "Width0" or propName == "Width1" or propName == "Speed" or propName == "Acceleration") and scale or 1
+					local decoded = decodeValue(propData, createdNodes, pScale)
+					if decoded ~= nil then
+						pcall(function()
+							if propName == "Enabled" and opts.enabled ~= nil then
+								(inst :: any)[propName] = opts.enabled
+							else
+								(inst :: any)[propName] = decoded
+							end
+						end)
+					end
+				end
+			end
+		end
+	end
+
+	-- Pass 4: Hubungkan Deferred Attachment References (Beam / Trail)
+	for _, ref in ipairs(refDeferred) do
+		local targetNode = createdNodes[ref.refIdx]
+		if targetNode and targetNode:IsA("Attachment") then
+			pcall(function()
+				(ref.inst :: any)[ref.propName] = targetNode
+			end)
+		end
+	end
+
+	return {
+		status = #errors == 0 and "success" or "partial",
+		createdCount = createdCount,
+		root = createdNodes[1] or targetParent,
+		errors = errors
+	}
+end
+
+return Serializer
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
 		<Item class="ModuleScript" referent="RBX_patch_script_source">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
@@ -1984,6 +4495,104 @@ end
 ]]></ProtectedString>
 			</Properties>
 		</Item>
+		<Item class="ModuleScript" referent="RBX_scan_vfx">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">scan_vfx</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- Skill Module: scan_vfx
+-- Deskripsi: Memindai efek visual (ParticleEmitter, Beam, Trail, Light)
+-- pada objek target di Roblox Studio dan mengubahnya menjadi tabel murni
+-- ══════════════════════════════════════════════════════════════════════
+
+local HttpService = game:GetService("HttpService")
+local serializerMod = script.Parent:WaitForChild("nv_vfx_serializer")
+local Serializer = require(serializerMod)
+
+local function detectCategory(name: string, data: any): string
+	local lower = string.lower(name)
+	if lower:find("slash") or lower:find("blade") or lower:find("sword") or lower:find("cut") then
+		return "Slash"
+	elseif lower:find("explosion") or lower:find("burst") or lower:find("blast") or lower:find("boom") or lower:find("fire") then
+		return "Explosion"
+	elseif lower:find("aura") or lower:find("glow") or lower:find("shield") or lower:find("barrier") then
+		return "Aura"
+	elseif lower:find("laser") or lower:find("beam") or lower:find("ray") then
+		return "Beam"
+	elseif lower:find("magic") or lower:find("spell") or lower:find("rune") or lower:find("circle") or lower:find("portal") then
+		return "Magic"
+	elseif lower:find("hit") or lower:find("impact") or lower:find("spark") or lower:find("clash") then
+		return "Impact"
+	elseif lower:find("projectile") or lower:find("bullet") or lower:find("arrow") or lower:find("missile") then
+		return "Projectile"
+	end
+	return "Ambient"
+end
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+	if not targetInstance then
+		return { status = "error", error = "Target instance untuk scan_vfx tidak ditemukan: " .. tostring(targetPath) }
+	end
+
+	local parsedData = {}
+	if data and data ~= "" then
+		pcall(function()
+			if type(data) == "table" then
+				parsedData = data
+			else
+				parsedData = HttpService:JSONDecode(tostring(data))
+			end
+		end)
+	end
+
+	local vfxName = parsedData.name or targetInstance.Name or "Unnamed_VFX"
+	local rawCat = parsedData.category or detectCategory(vfxName, parsedData)
+	local category = "Ambient"
+	if type(rawCat) == "string" and #rawCat > 0 then
+		category = string.upper(string.sub(rawCat, 1, 1)) .. string.lower(string.sub(rawCat, 2))
+	end
+	local tags = parsedData.tags or { string.lower(category) }
+
+	local ok, serialized = pcall(function()
+		return Serializer.serialize(targetInstance)
+	end)
+
+	if not ok or not serialized then
+		return { status = "error", error = "Gagal memindai VFX: " .. tostring(serialized) }
+	end
+
+	if serialized.nodeCount == 0 or (serialized.stats.emitters == 0 and serialized.stats.beams == 0 and serialized.stats.trails == 0 and serialized.stats.lights == 0) then
+		return {
+			status = "error",
+			error = "Objek '" .. targetInstance.Name .. "' tidak memiliki komponen VFX (ParticleEmitter, Beam, Trail, atau Light)."
+		}
+	end
+
+	return {
+		status = "success",
+		result = {
+			name = vfxName,
+			category = category,
+			tags = tags,
+			description = parsedData.description or ("Scanned VFX from " .. targetInstance:GetFullName()),
+			stats = serialized.stats,
+			nodeCount = serialized.nodeCount,
+			rootClass = serialized.rootClass,
+			data = serialized
+		}
+	}
+end
+
+]]></ProtectedString>
+			</Properties>
+		</Item>
 		<Item class="ModuleScript" referent="RBX_script_grep">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
@@ -2074,6 +4683,141 @@ end
 
     return { status = "success", matches = matches, count = matchCount, limitReached = (matchCount >= MAX_MATCHES) }
 end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_scrub_timeline">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">scrub_timeline</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- Skill Module: scrub_timeline
+-- Deskripsi: Headless Timeline Scrubbing & VFX Playhead Controller
+-- Mengevaluasi pose rig dan memicu burst/scrub VFX pada timestamp spesifik (t)
+-- secara deterministik langsung di Viewport Roblox Studio.
+-- ══════════════════════════════════════════════════════════════════════
+
+local HttpService = game:GetService("HttpService")
+local kinematicsMod = script.Parent:WaitForChild("nv_kinematics")
+local Kinematics = require(kinematicsMod)
+local curvesMod = script.Parent:WaitForChild("nv_curves")
+local Curves = require(curvesMod)
+local motionMod = script.Parent:WaitForChild("nv_motion_generator")
+local Motion = require(motionMod)
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+	if not targetInstance then
+		return { status = "error", error = "Target instance untuk scrub_timeline tidak ditemukan: " .. tostring(targetPath) }
+	end
+
+	local payload: { [string]: any } = {}
+	pcall(function()
+		if type(data) == "table" then payload = data
+		else payload = HttpService:JSONDecode(tostring(data)) end
+	end)
+
+	local timePos = tonumber(payload.time) or 0.0
+	local action = payload.action or "melee_slash"
+	local emitVfx = payload.emit_vfx == true or payload.emit == true
+	local emitCount = tonumber(payload.emit_count) or 20
+
+	local rigInfo = Kinematics.inspectRig(targetInstance:IsA("Model") and targetInstance or targetInstance:FindFirstAncestorOfClass("Model") :: any)
+	local appliedMotors: { string } = {}
+
+	-- 1. Scrub Rig Joint Poses jika target adalah Rig
+	if rigInfo then
+		local keyframes: { Motion.KeyframeData }
+		if action == "walk_cycle" then
+			keyframes = Motion.generateWalkCycle(rigInfo, payload.parameters)
+		elseif action == "punch" then
+			keyframes = Motion.generatePunch(rigInfo, payload.parameters)
+		elseif action == "idle" or action == "idle_breath" then
+			keyframes = Motion.generateIdle(rigInfo, payload.parameters)
+		else
+			keyframes = Motion.generateMeleeSlash(rigInfo, payload.parameters)
+		end
+
+		if #keyframes > 0 then
+			table.sort(keyframes, function(a, b) return a.time < b.time end)
+			local totalDur = keyframes[#keyframes].time
+			local clampedTime = math.clamp(timePos, 0, totalDur)
+
+			-- Cari segmen [kA, kB]
+			local kA = keyframes[1]
+			local kB = keyframes[#keyframes]
+			for i = 1, #keyframes - 1 do
+				if clampedTime >= keyframes[i].time and clampedTime <= keyframes[i + 1].time then
+					kA = keyframes[i]
+					kB = keyframes[i + 1]
+					break
+				end
+			end
+
+			local segDur = kB.time - kA.time
+			local alpha = segDur > 1e-5 and ((clampedTime - kA.time) / segDur) or 0
+			local curvedAlpha = Curves.evaluate(payload.easing or "QuadInOut", alpha)
+
+			for motorName, cfA in pairs(kA.poses) do
+				local cfB = kB.poses[motorName] or cfA
+				local interpCF = Curves.slerp(cfA, cfB, curvedAlpha)
+				local m = rigInfo.motors[motorName]
+				if m then
+					pcall(function()
+						m.C0 = interpCF
+						table.insert(appliedMotors, motorName)
+					end)
+				end
+			end
+		end
+	end
+
+	-- 2. Scrub & Trigger VFX Emitters
+	local emittersTriggered = 0
+	local beamsToggled = 0
+
+	local function checkVfx(inst: Instance)
+		if inst:IsA("ParticleEmitter") then
+			if emitVfx then
+				pcall(function()
+					inst:Emit(emitCount)
+					emittersTriggered += 1
+				end)
+			end
+		elseif inst:IsA("Beam") or inst:IsA("Trail") then
+			if payload.enabled ~= nil then
+				pcall(function()
+					inst.Enabled = payload.enabled
+					beamsToggled += 1
+				end)
+			end
+		end
+	end
+
+	checkVfx(targetInstance)
+	for _, desc in ipairs(targetInstance:GetDescendants()) do
+		checkVfx(desc)
+	end
+
+	return {
+		status = "success",
+		result = {
+			time = timePos,
+			action = action,
+			motorsPosed = #appliedMotors,
+			emittersTriggered = emittersTriggered,
+			beamsToggled = beamsToggled,
+			message = string.format("Timeline di-scrub ke t=%.2fs (Pose: %d joint, VFX: %d emitter burst)", timePos, #appliedMotors, emittersTriggered)
+		}
+	}
+end
+
 ]]></ProtectedString>
 			</Properties>
 		</Item>
@@ -2533,6 +5277,79 @@ return SecurityScanner
                 targetInstance[prop] = BrickColor.new(val)
             elseif typeof(currentVal) == "CFrame" and type(val) == "table" then
                 targetInstance[prop] = CFrame.new(unpack(val))
+            elseif typeof(currentVal) == "ColorSequence" or (type(val) == "table" and val.t == "ColorSequence") then
+                local kps = {}
+                local rawList = (type(val) == "table" and val.t == "ColorSequence") and val.v or val
+                if type(rawList) == "table" then
+                    for _, kp in ipairs(rawList) do
+                        local t = kp[1] or 0
+                        local col = kp[2]
+                        local c3
+                        if typeof(col) == "Color3" then
+                            c3 = col
+                        elseif type(col) == "table" and col.t == "Color3" then
+                            c3 = Color3.new(col.v[1], col.v[2], col.v[3])
+                        elseif type(col) == "table" and #col >= 3 then
+                            c3 = (col[1] > 1 or col[2] > 1 or col[3] > 1) and Color3.fromRGB(col[1], col[2], col[3]) or Color3.new(col[1], col[2], col[3])
+                        else
+                            c3 = Color3.new(1, 1, 1)
+                        end
+                        table.insert(kps, ColorSequenceKeypoint.new(math.clamp(t, 0, 1), c3))
+                    end
+                end
+                if #kps >= 2 then
+                    table.sort(kps, function(a, b) return a.Time < b.Time end)
+                    -- Pastikan keypoint pertama t=0 dan terakhir t=1
+                    if kps[1].Time ~= 0 then
+                        kps[1] = ColorSequenceKeypoint.new(0, kps[1].Value)
+                    end
+                    if kps[#kps].Time ~= 1 then
+                        kps[#kps] = ColorSequenceKeypoint.new(1, kps[#kps].Value)
+                    end
+                    -- Pastikan waktu meningkat secara monoton murni
+                    for i = 2, #kps do
+                        if kps[i].Time <= kps[i - 1].Time then
+                            local newT = math.min(1.0, kps[i - 1].Time + 0.001)
+                            kps[i] = ColorSequenceKeypoint.new(newT, kps[i].Value)
+                        end
+                    end
+                    targetInstance[prop] = ColorSequence.new(kps)
+                elseif #kps == 1 then
+                    targetInstance[prop] = ColorSequence.new(kps[1].Value)
+                end
+            elseif typeof(currentVal) == "NumberSequence" or (type(val) == "table" and val.t == "NumberSequence") then
+                local kps = {}
+                local rawList = (type(val) == "table" and val.t == "NumberSequence") and val.v or val
+                if type(rawList) == "table" then
+                    for _, kp in ipairs(rawList) do
+                        if type(kp) == "table" then
+                            local t = kp[1] or 0
+                            local v = kp[2] or 0
+                            local env = kp[3] or 0
+                            table.insert(kps, NumberSequenceKeypoint.new(math.clamp(t, 0, 1), v, env))
+                        end
+                    end
+                end
+                if #kps >= 2 then
+                    table.sort(kps, function(a, b) return a.Time < b.Time end)
+                    -- Pastikan keypoint pertama t=0 dan terakhir t=1
+                    if kps[1].Time ~= 0 then
+                        kps[1] = NumberSequenceKeypoint.new(0, kps[1].Value, kps[1].Envelope)
+                    end
+                    if kps[#kps].Time ~= 1 then
+                        kps[#kps] = NumberSequenceKeypoint.new(1, kps[#kps].Value, kps[#kps].Envelope)
+                    end
+                    -- Pastikan waktu meningkat secara monoton murni
+                    for i = 2, #kps do
+                        if kps[i].Time <= kps[i - 1].Time then
+                            local newT = math.min(1.0, kps[i - 1].Time + 0.001)
+                            kps[i] = NumberSequenceKeypoint.new(newT, kps[i].Value, kps[i].Envelope)
+                        end
+                    end
+                    targetInstance[prop] = NumberSequence.new(kps)
+                elseif #kps == 1 then
+                    targetInstance[prop] = NumberSequence.new(kps[1].Value)
+                end
             elseif typeof(currentVal) == "EnumItem" and type(val) == "string" then
                 local enumType = tostring(currentVal.EnumType)
                 local successEnum, enumValue = pcall(function() return Enum[enumType][val] end)
@@ -2581,6 +5398,82 @@ return SecurityScanner
     end
     return { status = "success", result = "Berhasil mengubah properti: " .. table.concat(applied, ", ") }
 end
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX_solve_limb_ik">
+			<Properties>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<bool name="Disabled">false</bool>
+				<Content name="LinkedSource"><null></null></Content>
+				<string name="Name">solve_limb_ik</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+				<ProtectedString name="Source"><![CDATA[--!strict
+-- ══════════════════════════════════════════════════════════════════════
+-- Skill Module: solve_limb_ik
+-- Deskripsi: Semantic Tool untuk AI Agent menghitung orientasi sendi
+-- lengan / kaki menuju koordinat sasaran 3D secara analitis O(1).
+-- ══════════════════════════════════════════════════════════════════════
+
+local HttpService = game:GetService("HttpService")
+local kinematicsMod = script.Parent:WaitForChild("nv_kinematics")
+local Kinematics = require(kinematicsMod)
+
+return function(targetInstance: Instance?, data: any, ctx: any, targetPath: string?)
+	if not targetInstance then
+		return { status = "error", error = "Target karakter rig untuk solve_limb_ik tidak ditemukan: " .. tostring(targetPath) }
+	end
+
+	local rigInfo = Kinematics.inspectRig(targetInstance:IsA("Model") and targetInstance or targetInstance:FindFirstAncestorOfClass("Model") :: any)
+	if not rigInfo then
+		return { status = "error", error = "Target bukan model karakter rig (R6/R15) yang valid: " .. targetInstance:GetFullName() }
+	end
+
+	local payload: { [string]: any } = {}
+	pcall(function()
+		if type(data) == "table" then payload = data
+		else payload = HttpService:JSONDecode(tostring(data)) end
+	end)
+
+	local limb = tostring(payload.limb or "RightArm")
+	local goalArr = payload.goal
+	if not goalArr or type(goalArr) ~= "table" or #goalArr < 3 then
+		return { status = "error", error = "Parameter 'goal' [X, Y, Z] wajib diisi." }
+	end
+
+	local goalPos = Vector3.new(goalArr[1], goalArr[2], goalArr[3])
+	local polePos: Vector3? = nil
+	if payload.pole and type(payload.pole) == "table" and #payload.pole >= 3 then
+		polePos = Vector3.new(payload.pole[1], payload.pole[2], payload.pole[3])
+	end
+
+	local apply = payload.apply_to_rig ~= false
+	local solved = Kinematics.solveLimb(rigInfo, limb, goalPos, polePos, apply)
+
+	if not solved then
+		return { status = "error", error = "Gagal menyelesaikan IK untuk anggota tubuh: " .. limb }
+	end
+
+	local resultC0: { [string]: any } = {}
+	for mName, cf in pairs(solved) do
+		resultC0[mName] = { t = "CFrame", v = { cf:GetComponents() } }
+	end
+
+	return {
+		status = "success",
+		result = {
+			limb = limb,
+			rigType = rigInfo.isR15 and "R15" or "R6",
+			applied = apply,
+			targetGoal = { goalPos.X, goalPos.Y, goalPos.Z },
+			solvedMotors = resultC0
+		}
+	}
+end
+
 ]]></ProtectedString>
 			</Properties>
 		</Item>

@@ -6,8 +6,22 @@ Sistem ini didesain menggunakan **Hybrid Architecture** yang memisahkan logika E
 
 ---
 
-## 🌟 Fitur Unggulan v2.3
+## 🌟 Fitur Unggulan v2.4 (Animation, VFX & Rigging Suite)
 
+- 🏗️ **NV-Rig Engine & Joint Kinematics (`inspect_rig`, `auto_rig`, `edit_rig_joint`, `weld_assembly`, `mirror_rig`)**:
+  - **Pure Headless Dispatcher**: Operasi rigging deterministik instan ($O(1)$) tanpa overhead render visual.
+  - **Hukum Non-Dislokasi Poros (*Non-Dislocation Law*)**: Menggeser/memutar titik engsel sendi di dunia nyata dengan kompensasi otomatis $C_1 = C_{1\text{old}} \times \text{diff}$ tanpa pernah mendislokasi part anak.
+  - **1-Click Auto-Rigging**: Membangun rig lengkap R6 (6 part), R15 (15 part), maupun penautan senjata (`WeaponGrip`) secara instan dengan auto-unanchor.
+  - **Bilateral X-Axis Mirroring & Assembly Welder**: Refleksi simetris sendi kiri $\leftrightarrow$ kanan dan pengelasan seluruh komponen armor/prop ke part jangkar utama.
+- 🏃 **NV-Animation Engine & Kinematics (`animate_character`, `solve_limb_ik`, `scrub_timeline`)**:
+  - **Human-like Motion Synthesis**: Menghasilkan animasi karakter berkualitas tinggi (Walk, Slash, Punch, Idle Breath) berbasis prinsip animasi alami (Anticipation, Follow-Through).
+  - **Interpolasi Kurva Halus**: Menggunakan kurva Cubic Bezier (`PoseEasingStyle.Cubic`) dan Quaternion SLERP 4D rotation interpolation bebas *Gimbal Lock*.
+  - **Analytical 2-Link LimbIK O(1)**: Penyelesaian sudut tekukan siku dan lutut menggunakan Hukum Cosinus sudut tertutup instan dan ekstensi SoftIK anti-snapping.
+  - **Official KeyframeSequence**: Animasi disimpan langsung ke instance resmi di `AnimSaves` karakter, bukan script loop runtime.
+- ✨ **NV-VFX Subsystem & Cross-Project Database (`scan_vfx`, `apply_vfx`, `list_vfx_database`, `delete_vfx`)**:
+  - **1:1 Pure Table Serializer**: Mengonversi `ParticleEmitter`, `Beam`, `Trail`, `Light`, dan `Attachment` menjadi tabel data murni JSON dengan relasi pointer yang aman.
+  - **Database Lintas-Proyek**: Pindai VFX di Project A dan pasang kembali di Project B dengan faktor skala ukuran opsional (`scale`). Dilengkapi 5 preset bawaan (*Cyan Slash*, *Solar Burst*, *Dragon Aura*, *Arcane Rune*, *Emerald Beam*).
+  - **Web Category Browser**: Tab antarmuka web modern dengan filter kategori, pencarian real-time, preview JSON, dan aksi 1-klik.
 - ⚡ **Batch Instance Builder (`batch_create_instances`, `batch_set_properties`)**:
   - Membangun hierarki objek/UI bersarang puluhan tingkat secara instan dalam 1 putaran request (mengeliminasi 10–20 latency roundtrips).
   - Pembaruan properti massal secara atomik dengan dukungan penuh tipe data Roblox (`UDim`, `UDim2`, `Vector2`, `Vector3`, `NumberRange`, `Rect`, dll).
@@ -53,7 +67,7 @@ curl -fsSL https://raw.githubusercontent.com/Adiholick/nvstudio-mcp/main/install
 **Apa saja yang dilakukan installer ini secara otomatis?**
 1. 📦 Mengunduh source code, memasang dependensi Node.js, dan mengkompilasi TypeScript (*Bridge Server*).
 2. 🧩 **Memasang Plugin Roblox Studio (`nvstudio_mcp.rbxmx`) otomatis** ke folder sistem Roblox Studio Anda (`%LOCALAPPDATA%\Roblox\Plugins` di Windows atau `~/Documents/ROBLOX/Plugins` di macOS).
-3. 🧠 **Universal AI Skill Installer**: Menginjeksi skill pemandu (*nvstudio-mcp-guide*, *nvstudio-gui-standards*, *nvstudio-assets-terrain-guide*, *nvstudio-roblox-sync-guide*) dan aturan anti-halusinasi langsung ke struktur editor AI Anda (**Antigravity IDE**, **Cursor**, **Claude Code**, **Codex**, **OpenCode**, dan **Windsurf**).
+3. 🧠 **Universal AI Skill Installer**: Menginjeksi skill pemandu (*nvstudio-mcp-guide*, *nvstudio-gui-standards*, *nvstudio-animation-vfx*, *nvstudio-rig-engine*, *nvstudio-assets-terrain-guide*, *nvstudio-roblox-sync-guide*) dan aturan anti-halusinasi langsung ke struktur editor AI Anda (**Antigravity IDE**, **Cursor**, **Claude Code**, **Codex**, **OpenCode**, dan **Windsurf**).
 4. ⚙️ Melakukan auto-konfigurasi registrasi MCP server pada editor yang terdeteksi.
 
 ---

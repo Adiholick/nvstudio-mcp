@@ -1,0 +1,869 @@
+[
+  {
+    "id": "preset-cyan-slash",
+    "name": "Cyan Horizon Slash",
+    "category": "Slash",
+    "tags": [
+      "sword",
+      "cyan",
+      "combat",
+      "slash",
+      "beam"
+    ],
+    "description": "High-speed sharp cybernetic slash effect with dual-layer brightness beams.",
+    "author": "NVStudio",
+    "createdAt": "2026-11-06T04:47:26.974Z",
+    "nodeCount": 5,
+    "stats": {
+      "emitters": 0,
+      "beams": 2,
+      "trails": 0,
+      "lights": 0
+    },
+    "data": {
+      "version": 1,
+      "rootName": "CyanHorizonSlash",
+      "rootClass": "Folder",
+      "nodeCount": 5,
+      "stats": {
+        "emitters": 0,
+        "beams": 2,
+        "trails": 0,
+        "lights": 0
+      },
+      "nodes": [
+        {
+          "class": "Folder",
+          "name": "CyanHorizonSlash",
+          "properties": {
+            "Name": "CyanHorizonSlash"
+          }
+        },
+        {
+          "parent": 1,
+          "class": "Attachment",
+          "name": "Att0",
+          "properties": {
+            "Name": "Att0",
+            "Visible": false,
+            "CFrame": {
+              "t": "CFrame",
+              "v": [
+                2,
+                0.5,
+                0,
+                1,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "parent": 1,
+          "class": "Attachment",
+          "name": "Att1",
+          "properties": {
+            "Name": "Att1",
+            "Visible": false,
+            "CFrame": {
+              "t": "CFrame",
+              "v": [
+                -2,
+                -0.5,
+                0,
+                1,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "parent": 1,
+          "class": "Beam",
+          "name": "SlashCore",
+          "properties": {
+            "Name": "SlashCore",
+            "Enabled": true,
+            "Attachment0": {
+              "t": "Ref",
+              "v": 2
+            },
+            "Attachment1": {
+              "t": "Ref",
+              "v": 3
+            },
+            "Brightness": 3000,
+            "LightEmission": 1,
+            "LightInfluence": 0,
+            "Width0": 1.2,
+            "Width1": 0.1,
+            "Texture": "rbxassetid://85772363699785",
+            "TextureSpeed": 5,
+            "TextureLength": 1,
+            "Color": {
+              "t": "ColorSequence",
+              "v": [
+                [
+                  0,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0,
+                      0.8,
+                      1
+                    ]
+                  }
+                ],
+                [
+                  1,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0,
+                      1,
+                      0.8
+                    ]
+                  }
+                ]
+              ]
+            },
+            "Transparency": {
+              "t": "NumberSequence",
+              "v": [
+                [
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1,
+                  1,
+                  0
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "parent": 1,
+          "class": "Beam",
+          "name": "SlashGlow",
+          "properties": {
+            "Name": "SlashGlow",
+            "Enabled": true,
+            "Attachment0": {
+              "t": "Ref",
+              "v": 2
+            },
+            "Attachment1": {
+              "t": "Ref",
+              "v": 3
+            },
+            "Brightness": 1500,
+            "LightEmission": 0.8,
+            "Width0": 2.5,
+            "Width1": 0.5,
+            "TextureSpeed": 3,
+            "Color": {
+              "t": "ColorSequence",
+              "v": [
+                [
+                  0,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0.1,
+                      0.5,
+                      1
+                    ]
+                  }
+                ],
+                [
+                  1,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0.2,
+                      0.8,
+                      1
+                    ]
+                  }
+                ]
+              ]
+            },
+            "Transparency": {
+              "t": "NumberSequence",
+              "v": [
+                [
+                  0,
+                  0.2,
+                  0
+                ],
+                [
+                  1,
+                  1,
+                  0
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "preset-solar-burst",
+    "name": "Solar Flare Burst",
+    "category": "Explosion",
+    "tags": [
+      "fire",
+      "orange",
+      "explosion",
+      "particles",
+      "burst"
+    ],
+    "description": "Radial fiery shockwave burst with expanding sparks and heat glow.",
+    "author": "NVStudio",
+    "createdAt": "2026-11-06T04:47:26.974Z",
+    "nodeCount": 3,
+    "stats": {
+      "emitters": 2,
+      "beams": 0,
+      "trails": 0,
+      "lights": 1
+    },
+    "data": {
+      "version": 1,
+      "rootName": "SolarFlareBurst",
+      "rootClass": "Folder",
+      "nodeCount": 3,
+      "stats": {
+        "emitters": 2,
+        "beams": 0,
+        "trails": 0,
+        "lights": 1
+      },
+      "nodes": [
+        {
+          "class": "Folder",
+          "name": "SolarFlareBurst",
+          "properties": {
+            "Name": "SolarFlareBurst"
+          }
+        },
+        {
+          "parent": 1,
+          "class": "ParticleEmitter",
+          "name": "Sparks",
+          "properties": {
+            "Name": "Sparks",
+            "Enabled": true,
+            "Rate": 200,
+            "Speed": {
+              "t": "NumberRange",
+              "v": [
+                25,
+                45
+              ]
+            },
+            "SpreadAngle": {
+              "t": "Vector2",
+              "v": [
+                180,
+                180
+              ]
+            },
+            "Lifetime": {
+              "t": "NumberRange",
+              "v": [
+                0.4,
+                0.8
+              ]
+            },
+            "LightEmission": 1,
+            "LightInfluence": 0,
+            "Brightness": 10,
+            "Size": {
+              "t": "NumberSequence",
+              "v": [
+                [
+                  0,
+                  1.2,
+                  0
+                ],
+                [
+                  0.7,
+                  0.4,
+                  0
+                ],
+                [
+                  1,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "Color": {
+              "t": "ColorSequence",
+              "v": [
+                [
+                  0,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      1,
+                      0.9,
+                      0.5
+                    ]
+                  }
+                ],
+                [
+                  0.5,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      1,
+                      0.4,
+                      0
+                    ]
+                  }
+                ],
+                [
+                  1,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0.8,
+                      0.1,
+                      0
+                    ]
+                  }
+                ]
+              ]
+            },
+            "Transparency": {
+              "t": "NumberSequence",
+              "v": [
+                [
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1,
+                  1,
+                  0
+                ]
+              ]
+            },
+            "Texture": "rbxassetid://244221448"
+          }
+        },
+        {
+          "parent": 1,
+          "class": "PointLight",
+          "name": "ExplosionLight",
+          "properties": {
+            "Name": "ExplosionLight",
+            "Enabled": true,
+            "Brightness": 8,
+            "Range": 24,
+            "Color": {
+              "t": "Color3",
+              "v": [
+                1,
+                0.5,
+                0.1
+              ]
+            },
+            "Shadows": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "preset-dragon-aura",
+    "name": "Azure Dragon Aura",
+    "category": "Aura",
+    "tags": [
+      "aura",
+      "magic",
+      "energy",
+      "cyan",
+      "blue"
+    ],
+    "description": "Swirling ethereal flame aura for boss phases, charging states, and powerups.",
+    "author": "NVStudio",
+    "createdAt": "2026-11-06T04:47:26.974Z",
+    "nodeCount": 2,
+    "stats": {
+      "emitters": 1,
+      "beams": 0,
+      "trails": 0,
+      "lights": 1
+    },
+    "data": {
+      "version": 1,
+      "rootName": "AzureDragonAura",
+      "rootClass": "Folder",
+      "nodeCount": 2,
+      "stats": {
+        "emitters": 1,
+        "beams": 0,
+        "trails": 0,
+        "lights": 1
+      },
+      "nodes": [
+        {
+          "class": "Folder",
+          "name": "AzureDragonAura",
+          "properties": {
+            "Name": "AzureDragonAura"
+          }
+        },
+        {
+          "parent": 1,
+          "class": "ParticleEmitter",
+          "name": "FlameAura",
+          "properties": {
+            "Name": "FlameAura",
+            "Enabled": true,
+            "Rate": 35,
+            "Speed": {
+              "t": "NumberRange",
+              "v": [
+                2,
+                5
+              ]
+            },
+            "EmissionDirection": {
+              "t": "EnumItem",
+              "e": "NormalId",
+              "v": "Top"
+            },
+            "Lifetime": {
+              "t": "NumberRange",
+              "v": [
+                0.8,
+                1.4
+              ]
+            },
+            "LightEmission": 0.9,
+            "LightInfluence": 0,
+            "Brightness": 5,
+            "Drag": 2,
+            "Acceleration": {
+              "t": "Vector3",
+              "v": [
+                0,
+                8,
+                0
+              ]
+            },
+            "Size": {
+              "t": "NumberSequence",
+              "v": [
+                [
+                  0,
+                  0.5,
+                  0
+                ],
+                [
+                  0.5,
+                  2.5,
+                  0
+                ],
+                [
+                  1,
+                  0.2,
+                  0
+                ]
+              ]
+            },
+            "Color": {
+              "t": "ColorSequence",
+              "v": [
+                [
+                  0,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0,
+                      0.7,
+                      1
+                    ]
+                  }
+                ],
+                [
+                  0.6,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0.2,
+                      0.2,
+                      0.9
+                    ]
+                  }
+                ],
+                [
+                  1,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0.05,
+                      0,
+                      0.4
+                    ]
+                  }
+                ]
+              ]
+            },
+            "Transparency": {
+              "t": "NumberSequence",
+              "v": [
+                [
+                  0,
+                  0.8,
+                  0
+                ],
+                [
+                  0.3,
+                  0.2,
+                  0
+                ],
+                [
+                  1,
+                  1,
+                  0
+                ]
+              ]
+            },
+            "Texture": "rbxassetid://258128463"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "preset-arcane-rune",
+    "name": "Arcane Summoning Circle",
+    "category": "Magic",
+    "tags": [
+      "magic",
+      "spell",
+      "circle",
+      "rune",
+      "purple"
+    ],
+    "description": "Luminous spinning arcane circle with floating magical motes.",
+    "author": "NVStudio",
+    "createdAt": "2026-11-06T04:47:26.974Z",
+    "nodeCount": 3,
+    "stats": {
+      "emitters": 1,
+      "beams": 0,
+      "trails": 0,
+      "lights": 1
+    },
+    "data": {
+      "version": 1,
+      "rootName": "ArcaneSummoningCircle",
+      "rootClass": "Folder",
+      "nodeCount": 3,
+      "stats": {
+        "emitters": 1,
+        "beams": 0,
+        "trails": 0,
+        "lights": 1
+      },
+      "nodes": [
+        {
+          "class": "Folder",
+          "name": "ArcaneSummoningCircle",
+          "properties": {
+            "Name": "ArcaneSummoningCircle"
+          }
+        },
+        {
+          "parent": 1,
+          "class": "ParticleEmitter",
+          "name": "MagicSparks",
+          "properties": {
+            "Name": "MagicSparks",
+            "Enabled": true,
+            "Rate": 40,
+            "Speed": {
+              "t": "NumberRange",
+              "v": [
+                1,
+                4
+              ]
+            },
+            "Lifetime": {
+              "t": "NumberRange",
+              "v": [
+                1,
+                2
+              ]
+            },
+            "LightEmission": 1,
+            "Size": {
+              "t": "NumberSequence",
+              "v": [
+                [
+                  0,
+                  0.2,
+                  0
+                ],
+                [
+                  0.5,
+                  0.6,
+                  0
+                ],
+                [
+                  1,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "Color": {
+              "t": "ColorSequence",
+              "v": [
+                [
+                  0,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0.8,
+                      0.2,
+                      1
+                    ]
+                  }
+                ],
+                [
+                  1,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0.4,
+                      0.8,
+                      1
+                    ]
+                  }
+                ]
+              ]
+            },
+            "Transparency": {
+              "t": "NumberSequence",
+              "v": [
+                [
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1,
+                  1,
+                  0
+                ]
+              ]
+            },
+            "Texture": "rbxassetid://244221448"
+          }
+        },
+        {
+          "parent": 1,
+          "class": "PointLight",
+          "name": "RuneGlow",
+          "properties": {
+            "Name": "RuneGlow",
+            "Enabled": true,
+            "Brightness": 4,
+            "Range": 16,
+            "Color": {
+              "t": "Color3",
+              "v": [
+                0.7,
+                0.2,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "preset-emerald-beam",
+    "name": "Emerald Laser Beam",
+    "category": "Beam",
+    "tags": [
+      "beam",
+      "laser",
+      "emerald",
+      "green",
+      "energy"
+    ],
+    "description": "High-density focused energy beam with glowing outer edge.",
+    "author": "NVStudio",
+    "createdAt": "2026-11-06T04:47:26.974Z",
+    "nodeCount": 4,
+    "stats": {
+      "emitters": 0,
+      "beams": 1,
+      "trails": 0,
+      "lights": 1
+    },
+    "data": {
+      "version": 1,
+      "rootName": "EmeraldLaserBeam",
+      "rootClass": "Folder",
+      "nodeCount": 4,
+      "stats": {
+        "emitters": 0,
+        "beams": 1,
+        "trails": 0,
+        "lights": 1
+      },
+      "nodes": [
+        {
+          "class": "Folder",
+          "name": "EmeraldLaserBeam",
+          "properties": {
+            "Name": "EmeraldLaserBeam"
+          }
+        },
+        {
+          "parent": 1,
+          "class": "Attachment",
+          "name": "Origin",
+          "properties": {
+            "Name": "Origin",
+            "CFrame": {
+              "t": "CFrame",
+              "v": [
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "parent": 1,
+          "class": "Attachment",
+          "name": "Target",
+          "properties": {
+            "Name": "Target",
+            "CFrame": {
+              "t": "CFrame",
+              "v": [
+                0,
+                0,
+                -30,
+                1,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "parent": 1,
+          "class": "Beam",
+          "name": "LaserCore",
+          "properties": {
+            "Name": "LaserCore",
+            "Enabled": true,
+            "Attachment0": {
+              "t": "Ref",
+              "v": 2
+            },
+            "Attachment1": {
+              "t": "Ref",
+              "v": 3
+            },
+            "Brightness": 2500,
+            "LightEmission": 1,
+            "Width0": 1.5,
+            "Width1": 1.5,
+            "TextureSpeed": 8,
+            "Color": {
+              "t": "ColorSequence",
+              "v": [
+                [
+                  0,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0.2,
+                      1,
+                      0.4
+                    ]
+                  }
+                ],
+                [
+                  1,
+                  {
+                    "t": "Color3",
+                    "v": [
+                      0,
+                      0.8,
+                      0.2
+                    ]
+                  }
+                ]
+              ]
+            },
+            "Transparency": {
+              "t": "NumberSequence",
+              "v": [
+                [
+                  0,
+                  0.1,
+                  0
+                ],
+                [
+                  1,
+                  0.1,
+                  0
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+]

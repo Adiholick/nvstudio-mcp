@@ -84,4 +84,35 @@ Saat merancang komponen interaktif khusus, patuhi pola NV-Series:
   - **Item Seleksi:** Gunakan `UIStroke` bernama `SelectStroke`: Active = `Color3.fromRGB(0, 255, 255)` (Cyan), Inactive = `Color3.fromRGB(60, 60, 65)`.
   - **Tombol Non-Aktif / Limit:** Set `AutoButtonColor = false` dan teks status (contoh: `"WAIT (Xs)"`, `"OUT OF QUOTA"`).
 
+## 8. NV-Animation Engine & Kinematics (Anti-Hallucination Ground Truth)
+Saat diminta menganimasikan karakter di Roblox Studio, Anda WAJIB mematuhi ground truth berikut:
+- **DILARANG MENGGUNAKAN LOOP RUNTIME**: Animasi karakter tidak boleh dibuat menggunakan script loop `while true do task.wait() ...`. Animasi wajib dibuat sebagai instance resmi `KeyframeSequence` di dalam `AnimSaves` rig (gunakan tool semantic `animate_character` atau `solve_limb_ik`).
+- **SENSITIVITAS SPASI NAMA MOTOR6D**:
+  - Karakter R15: Menggunakan CamelCase TANPA SPASI (`LeftShoulder`, `LeftElbow`, `LeftWrist`, `LeftHip`, `LeftKnee`, `LeftAnkle`, `Waist`, `Neck`, `Root`).
+  - Karakter R6: WAJIB MENGGUNAKAN SPASI (`Left Shoulder`, `Right Shoulder`, `Left Hip`, `Right Hip`, `Neck`, `RootJoint`).
+- **BATAS SUDUT ANATOMIS AMAN**:
+  - Siku (`LeftElbow`, `RightElbow`) dan Lutut (`LeftKnee`, `RightKnee`) adalah sendi engsel (hinge joint). Dilarang memutar sumbu Roll/Yaw. Sudut tekukan Pitch hanya $0^\circ \dots 145^\circ$ untuk siku dan $0^\circ \dots 135^\circ$ untuk lutut. Dilarang menekuk siku atau lutut ke arah berlawanan (dislokasi).
+  - Torso/Waist pitch dibatasi $-25^\circ \dots 35^\circ$, twist yaw $\pm 45^\circ$.
+- **PRINSIP GERAKAN HALUS (Disney 12 Principles)**:
+  - Setiap gerakan wajib memiliki fase ancang-ancang (*Anticipation*), interpolasi pelambatan (*QuadInOut* atau *CubicInOut*), dan peredaman akhir (*Follow-Through*).
+
+## 9. NV-VFX Serializer & Cross-Project Database Protocols
+Saat memindai, merekonstruksi, atau menerapkan efek visual antar-proyek:
+- **ATTACHMENT HARUS VALID**: Properti `Attachment0` dan `Attachment1` pada `Beam` atau `Trail` HANYA BOLEH menunjuk ke instance bertipe `Attachment`. Dilarang keras menunjuk ke Part atau Model.
+- **ATURAN URUTAN KEYPOINT**: Setiap `ColorSequence` dan `NumberSequence` WAJIB memiliki keypoint awal pada $t = 0.0$ dan keypoint akhir pada $t = 1.0$.
+- **ALUR KERJA LINTAS-PROYEK**:
+  - Gunakan tool `scan_vfx` pada Project A untuk mengonversi partikel, beam, trail, dan light menjadi tabel data murni yang disimpan secara persisten di database MCP.
+  - Gunakan tool `apply_vfx` pada Project B untuk menginstansiasi efek dari database ke target objek dengan parameter `scale` opsional.
+  - Dokumentasi referensi lengkap: lihat `docs/NV_ANIMATION_AND_VFX_GUIDE.md`.
+
+## 10. NV-Rig Engine & Joint Kinematics Protocols (Anti-Hallucination Ground Truth)
+Saat memeriksa, membuat, atau memodifikasi sendi karakter (`Motor6D` / `Weld`):
+- **PERSAMAAN KESEIMBANGAN SAMBUNGAN**: Hubungan spasial sendi diatur oleh `Part0.CFrame * C0 = Part1.CFrame * C1`.
+- **HUKUM NON-DISLOKASI PIVOT**: Saat menggeser atau memutar poros sendi, DILARANG hanya mengubah `C0` sepihak karena akan mendislokasi posisi fisik `Part1`. Nilai `C1` WAJIB dikompensasi secara simultan: `diff = C0_old:ToObjectSpace(C0_new); C1_new = C1_old * diff` (gunakan tool `edit_rig_joint`).
+- **ATURAN WAJIB UNANCHOR**: Seluruh part anak (`Part1`) yang dihubungkan dengan `Motor6D` atau `Weld` WAJIB disetel `Anchored = false`. Part yang berstatus anchored tidak akan dapat bergerak dalam simulasi fisika atau animasi.
+- **URUTAN KERJA RIGGING SEBELUM ANIMASI**: Dilarang memanggil `animate_character` pada model yang belum memiliki hierarki sendi valid. Selalu jalankan `inspect_rig` untuk diagnosa atau `auto_rig` untuk membuat kerangka standar.
+- **PENGELASAN ASSEMBLY SENJATA/PROP**: Gunakan `weld_assembly` untuk menyatukan seluruh komponen prop/senjata secara kaku ke part pegangan sebelum ditautkan ke karakter.
+- **DOKUMENTASI REFERENSI LENGKAP**: lihat `docs/NV_RIG_ENGINE_GUIDE.md`.
+
+
 

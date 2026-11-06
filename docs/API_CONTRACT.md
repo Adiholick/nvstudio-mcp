@@ -175,3 +175,57 @@ Dokumen ini adalah spesifikasi baku komunikasi antara Local Bridge Server (Node.
     - **Fungsi:** Mengambil dokumentasi resmi Roblox Creator Docs untuk Class, Service, Datatype, Enum, atau Library dengan filter member dan disk cache (~2 ms).
 23. **`list_connected_studios`**
     - **Fungsi:** Mengembalikan daftar session ID, Place ID, dan nama tempat Roblox Studio yang sedang aktif terhubung ke jembatan.
+
+### I. NV-VFX Subsystem & Database (v2.4+)
+24. **`scan_vfx`**
+    - **Target:** Path objek VFX di Studio (misal `Workspace.CyberSlash`).
+    - **Data:** JSON `{ name?: string, category?: string, tags?: string[], description?: string }`.
+    - **Fungsi:** Mengonversi objek `ParticleEmitter`, `Beam`, `Trail`, `Light`, dan `Attachment` menjadi tabel data murni (JSON-safe) dan menyimpannya secara persisten ke database MCP.
+25. **`apply_vfx`**
+    - **Target:** Path instance target di Studio (misal `Workspace.Character.RightHand`).
+    - **Data:** JSON `{ vfx_id: string, scale?: number, enabled?: boolean }`.
+    - **Fungsi:** Merekonstruksi efek visual dari database persisten MCP ke Studio aktif dengan fidelitas 100% dan penskalaan ukuran.
+26. **`list_vfx_database`**
+    - **Target:** Kosong.
+    - **Data:** JSON `{ category?: string, query?: string }`.
+    - **Fungsi:** Melihat katalog efek visual yang tersimpan di database persisten MCP dengan filter kategori dan pencarian kata kunci.
+27. **`delete_vfx`**
+    - **Target:** Kosong.
+    - **Data:** JSON `{ id: string }`.
+    - **Fungsi:** Menghapus efek visual dari database persisten MCP.
+
+### J. NV-Animation Engine & Kinematika (v2.4+)
+28. **`animate_character`**
+    - **Target:** Path model karakter rig (R6/R15) di Studio (misal `Workspace.Dummy`).
+    - **Data:** JSON `{ action: "walk_cycle" | "melee_slash" | "punch" | "idle_breath" | "custom", parameters?: { duration?: number, intensity?: number, easing?: string, loop?: boolean, vfx_events?: array }, key_poses?: array }`.
+    - **Fungsi:** Menghasilkan animasi karakter halus (Disney 12 Principles & Cubic Bezier) dan mengekspornya langsung ke `KeyframeSequence` resmi di `AnimSaves` rig.
+29. **`solve_limb_ik`**
+    - **Target:** Path model karakter rig (R6/R15).
+    - **Data:** JSON `{ limb: "LeftArm" | "RightArm" | "LeftLeg" | "RightLeg", goal: [x, y, z], pole?: [x, y, z], apply_to_rig?: boolean }`.
+    - **Fungsi:** Menyelesaikan inverse kinematics analitis (2-link LimbIK O(1)) dengan SoftIK anti-snapping.
+30. **`scrub_timeline`**
+    - **Target:** Path model karakter atau container VFX.
+    - **Data:** JSON `{ time: number, action?: string, emit_vfx?: boolean, emit_count?: number, enabled?: boolean }`.
+    - **Fungsi:** Melakukan scrubbing playhead timeline deterministik pada waktu $t$ di Viewport Studio (menerapkan pose SLERP dan memicu burst partikel).
+
+### K. NV-Rig Engine & Joint Kinematics (v2.4+)
+31. **`inspect_rig`**
+    - **Target:** Path model karakter atau objek di Studio (misal `Workspace.Dummy`).
+    - **Data:** Kosong.
+    - **Fungsi:** Mendiagnosis topologi rig: pohon sambungan Motor6D & Weld, deteksi cycle/circular dependency, status anchor part, dan posisi poros dunia 3D.
+32. **`edit_rig_joint`**
+    - **Target:** Path model karakter di Studio.
+    - **Data:** JSON `{ action: "create_joint" | "create_weld" | "edit_pivot" | "rotate_pivot" | "reset_pivot" | "align_joint" | "remove_joint", joint_name?: string, part0?: string, part1?: string, delta_world?: [x, y, z], target_world?: [x, y, z], rotate_euler_deg?: [x, y, z], align_to?: "Part0" | "Part1", reanchor?: boolean }`.
+    - **Fungsi:** Manipulasi sendi presisi tinggi menggunakan hukum non-dislokasi poros ($C_1 = C_{1\text{old}} \times \text{diff}$).
+33. **`auto_rig`**
+    - **Target:** Path model di Studio.
+    - **Data:** JSON `{ rig_type: "R6" | "R15" | "Weapon", weapon_target?: string, target_limb?: string }`.
+    - **Fungsi:** Auto-rigging cerdas 1-klik untuk Avatar R6, Avatar R15, atau Penautan Senjata (Weapon Grip) dengan unanchor otomatis.
+34. **`weld_assembly`**
+    - **Target:** Path model, armor, aksesori, prop, atau kendaraan.
+    - **Data:** JSON `{ primary_part?: string }`.
+    - **Fungsi:** Mengelas seluruh komponen BasePart pada sebuah model ke part jangkar utama secara atomik.
+35. **`mirror_rig`**
+    - **Target:** Path model karakter di Studio.
+    - **Data:** JSON `{ source_side: "Left" | "Right" }`.
+    - **Fungsi:** Mencerminkan seluruh konfigurasi sendi bilateral sepanjang sumbu simetri $X$ secara matematis.

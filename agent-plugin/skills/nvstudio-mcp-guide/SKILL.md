@@ -67,3 +67,17 @@ Sebelum menulis skrip Luau atau menggunakan API/Service yang belum pasti nama pr
 ## Modifikasi Skrip Cerdas (`patch_script_source`)
 - Jika hanya ingin mengubah sebagian baris kode tanpa menimpa seluruh file skrip, gunakan `patch_script_source` dengan parameter `search` dan `replacement`.
 - Untuk penggantian skrip utuh, gunakan `update_script_source` (otomatis dicek oleh AST Validator di Node.js untuk mencegah syntax error fatal).
+
+## Rigging, Animasi Karakter & Efek Visual (v2.4+)
+nvstudio-mcp dilengkapi dengan rangkaian modular tripartit:
+1. **NV-Rig Engine** (lihat skill `nvstudio-rig-engine`):
+   - Gunakan `inspect_rig` untuk diagnosa kesehatan sendi & anchor status.
+   - Gunakan `auto_rig` untuk membuat rig R6, R15, atau menautkan senjata (`Weapon`).
+   - Gunakan `edit_rig_joint` untuk memindahkan pivot tanpa dislokasi part anak.
+   - Gunakan `weld_assembly` untuk menyatukan armor/prop/kendaraan.
+2. **NV-Animation Engine** (lihat skill `nvstudio-animation-vfx`):
+   - Gunakan `animate_character` untuk membuat animasi resmi `KeyframeSequence` di `AnimSaves` (Walk, Slash, Punch, Idle).
+   - Gunakan `solve_limb_ik` untuk analytical 2-link LimbIK ke koordinat 3D.
+   - Gunakan `scrub_timeline` untuk scrubbing playhead waktu deterministik.
+3. **NV-VFX Subsystem** (lihat skill `nvstudio-animation-vfx`):
+   - Gunakan `scan_vfx` untuk memindai efek visual dan `apply_vfx` untuk merekonstruksinya dari database persisten.

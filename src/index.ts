@@ -19,6 +19,7 @@ import fs from 'fs';
 import path from 'path';
 import { validateLuauSyntax } from './luau-validator';
 import { getRobloxDocs } from './roblox-docs';
+import { getVfxDatabase } from './vfx-database';
 
 const HISTORY_DIR = path.join(__dirname, '..', '.history');
 if (!fs.existsSync(HISTORY_DIR)) {
@@ -656,6 +657,372 @@ const TOOLS: Tool[] = [
       required: ["updates"],
     },
   },
+  {
+    name: "scan_vfx",
+    description: "Pindai efek visual (ParticleEmitter, Beam, Trail, Light) pada objek di Roblox Studio dan simpan ke database persisten MCP untuk digunakan lintas-proyek.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path objek target di Roblox Studio (contoh: 'Workspace.MagicSpell', 'ReplicatedStorage.SlashFX').",
+        },
+        name: {
+          type: "string",
+          description: "Nama untuk efek visual ini di database MCP (opsional, default: nama objek).",
+        },
+        category: {
+          type: "string",
+          description: "Kategori efek visual (contoh: 'Slash', 'Explosion', 'Aura', 'Projectile', 'Magic', 'Impact', 'Beam', 'Ambient').",
+          enum: ["Slash", "Explosion", "Aura", "Projectile", "Magic", "Impact", "Beam", "Ambient"],
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Daftar kata kunci pencarian (contoh: ['sword', 'cyan', 'fast']).",
+        },
+        description: {
+          type: "string",
+          description: "Catatan penjelasan tentang efek visual ini.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "apply_vfx",
+    description: "Terapkan efek visual yang tersimpan di database persisten MCP ke objek target di Roblox Studio aktif dengan fidelitas 100%.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        vfx_id: {
+          type: "string",
+          description: "ID efek visual dari database MCP (contoh: 'preset-cyan-slash', atau ID hasil scan).",
+        },
+        target: {
+          type: "string",
+          description: "Path objek tujuan di Studio tempat VFX akan dipasang (contoh: 'Workspace.Player.RightHand', 'Workspace.Map').",
+        },
+        scale: {
+          type: "number",
+          description: "Faktor skala ukuran efek visual (contoh: 1.0 = normal, 1.5 = 50% lebih besar, 0.5 = separuh). Default: 1.0.",
+        },
+        enabled: {
+          type: "boolean",
+          description: "Paksa status Enabled pada seluruh emitter/beam (opsional).",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["vfx_id", "target"],
+    },
+  },
+  {
+    name: "list_vfx_database",
+    description: "Lihat katalog efek visual yang tersimpan di database persisten MCP, lengkap dengan rincian node emitter/beam dan filter kategori.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          description: "Filter berdasarkan kategori (contoh: 'Slash', 'Aura', 'Explosion', 'Magic', 'Beam', 'Impact').",
+        },
+        query: {
+          type: "string",
+          description: "Filter pencarian kata kunci berdasarkan nama, tag, atau deskripsi.",
+        },
+      },
+    },
+  },
+  {
+    name: "delete_vfx",
+    description: "Hapus efek visual dari database persisten MCP berdasarkan ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "ID efek visual yang akan dihapus dari database MCP.",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "animate_character",
+    description: "Buat animasi karakter yang halus (Walk, Slash, Punch, Idle, atau Custom) menggunakan NV-Animation Engine (Analytical LimbIK, Bezier Curves, Easing, dan Floor Pinning), lalu simpan sebagai KeyframeSequence resmi.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path model karakter rig R6 atau R15 di Studio (contoh: 'Workspace.Dummy', 'Workspace.Zombie').",
+        },
+        action: {
+          type: "string",
+          description: "Jenis animasi yang ingin dibuat.",
+          enum: ["walk_cycle", "melee_slash", "punch", "idle_breath", "custom"],
+        },
+        parameters: {
+          type: "object",
+          description: "Parameter kustomisasi animasi: { duration: number, intensity: number, easing: string, loop: boolean, clipName: string }.",
+        },
+        key_poses: {
+          type: "array",
+          description: "Array pose kunci jika menggunakan action 'custom': [{ time: 0, poses: { MotorName: { angles: [X,Y,Z] } } }].",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target", "action"],
+    },
+  },
+  {
+    name: "solve_limb_ik",
+    description: "Hitung dan terapkan rotasi sendi lengan/kaki (analytical 2-link LimbIK O(1)) menuju koordinat sasaran 3D secara instan dan halus.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path model karakter rig R6 atau R15 di Studio (contoh: 'Workspace.Dummy').",
+        },
+        limb: {
+          type: "string",
+          description: "Anggota tubuh yang ingin digerakkan.",
+          enum: ["LeftArm", "RightArm", "LeftLeg", "RightLeg"],
+        },
+        goal: {
+          type: "array",
+          items: { type: "number" },
+          description: "Target posisi 3D di world space: [X, Y, Z].",
+        },
+        pole: {
+          type: "array",
+          items: { type: "number" },
+          description: "Arah tekukan siku/lutut (pole vector 3D): [X, Y, Z] (opsional).",
+        },
+        apply_to_rig: {
+          type: "boolean",
+          description: "Apakah orientasi sendi langsung diterapkan ke model karakter di Studio (default: true).",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target", "limb", "goal"],
+    },
+  },
+  {
+    name: "scrub_timeline",
+    description: "Lakukan scrubbing playhead timeline animasi dan efek visual ke timestamp tertentu (t) secara langsung di Roblox Studio untuk melihat pose karakter dan memicu burst partikel VFX.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path objek target di Studio (Model karakter atau folder VFX).",
+        },
+        time: {
+          type: "number",
+          description: "Posisi waktu playhead timeline dalam detik (contoh: 0.35).",
+        },
+        action: {
+          type: "string",
+          description: "Aksi animasi yang ingin di-scrub (contoh: 'melee_slash', 'walk_cycle', 'punch', 'idle_breath').",
+        },
+        emit_vfx: {
+          type: "boolean",
+          description: "Apakah memicu semburan (burst) partikel pada frame waktu ini (default: true).",
+        },
+        emit_count: {
+          type: "number",
+          description: "Jumlah partikel yang disemburkan (default: 20).",
+        },
+        enabled: {
+          type: "boolean",
+          description: "Paksa status Enabled pada Beam/Trail pada playhead waktu ini.",
+        },
+        placeId: {
+          type: "number",
+          description: "Target Place ID untuk multi-Studio routing.",
+        },
+        studioId: {
+          type: "string",
+          description: "Target Studio session ID.",
+        },
+      },
+      required: ["target", "time"],
+    },
+  },
+  {
+    name: "inspect_rig",
+    description: "Inspeksi topologi dan hierarki rig karakter/objek di Studio secara headless. Menganalisis pohon sendi (Motor6D & Weld), mendeteksi circular dependency, memeriksa status anchor, dan melaporkan posisi poros di dunia 3D.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path objek Model karakter atau objek di Studio (contoh: 'Workspace.Dummy').",
+        },
+        placeId: { type: "number", description: "Target Place ID untuk multi-Studio routing." },
+        studioId: { type: "string", description: "Target Studio session ID." },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "edit_rig_joint",
+    description: "Operasi headless sendi NV-Rig Engine: buat Motor6D/Weld baru, geser titik tumpu (pivot) tanpa mendislokasi part anak, putar orientasi poros, setel ulang (reset), selaraskan (align), atau hapus sendi.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path Model karakter/objek di Studio (contoh: 'Workspace.Dummy').",
+        },
+        action: {
+          type: "string",
+          description: "Aksi manipulasi sendi.",
+          enum: ["create_joint", "create_weld", "edit_pivot", "rotate_pivot", "reset_pivot", "align_joint", "remove_joint"],
+        },
+        joint_name: {
+          type: "string",
+          description: "Nama sendi yang ingin diedit/dihapus (contoh: 'RightShoulder', 'Neck').",
+        },
+        part0: {
+          type: "string",
+          description: "Nama part induk (Part0) untuk create_joint/create_weld (contoh: 'Torso', 'UpperTorso').",
+        },
+        part1: {
+          type: "string",
+          description: "Nama part anak (Part1) untuk create_joint/create_weld (contoh: 'Right Arm', 'RightUpperArm').",
+        },
+        delta_world: {
+          type: "array",
+          items: { type: "number" },
+          description: "Pergeseran poros di koordinat dunia [X, Y, Z] untuk edit_pivot.",
+        },
+        target_world: {
+          type: "array",
+          items: { type: "number" },
+          description: "Posisi absolut poros target di dunia [X, Y, Z] untuk edit_pivot.",
+        },
+        rotate_euler_deg: {
+          type: "array",
+          items: { type: "number" },
+          description: "Rotasi poros [Pitch, Yaw, Roll] dalam derajat untuk rotate_pivot.",
+        },
+        align_to: {
+          type: "string",
+          description: "Penyelarasan orientasi poros ke 'Part0' atau 'Part1' untuk align_joint.",
+          enum: ["Part0", "Part1"],
+        },
+        reanchor: {
+          type: "boolean",
+          description: "Setel Part1 kembali ke 'Anchored = true' saat menghapus sendi (opsional).",
+        },
+        placeId: { type: "number", description: "Target Place ID untuk multi-Studio routing." },
+        studioId: { type: "string", description: "Target Studio session ID." },
+      },
+      required: ["target", "action"],
+    },
+  },
+  {
+    name: "auto_rig",
+    description: "Auto-rigging cerdas 1-klik untuk Avatar R6, R15, atau Penautan Senjata (Weapon/Tool) dengan matematika kompensasi spasial otomatis.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path Model karakter di Studio (contoh: 'Workspace.Dummy', 'Workspace.CustomAvatar').",
+        },
+        rig_type: {
+          type: "string",
+          description: "Tipe rig yang ingin dibangun secara otomatis.",
+          enum: ["R6", "R15", "Weapon"],
+        },
+        weapon_target: {
+          type: "string",
+          description: "Path objek senjata/prop di Studio jika rig_type='Weapon' (contoh: 'Workspace.Sword').",
+        },
+        target_limb: {
+          type: "string",
+          description: "Anggota tubuh tempat senjata dipasang (contoh: 'RightHand' atau 'Right Arm').",
+        },
+        placeId: { type: "number", description: "Target Place ID untuk multi-Studio routing." },
+        studioId: { type: "string", description: "Target Studio session ID." },
+      },
+      required: ["target", "rig_type"],
+    },
+  },
+  {
+    name: "weld_assembly",
+    description: "Las (Weld) seluruh komponen BasePart pada sebuah model (aksesori, armor, prop, kendaraan) ke PrimaryPart secara otomatis dengan unanchor aman.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path Model atau Folder di Studio yang ingin dilas (contoh: 'Workspace.ArmorSet').",
+        },
+        primary_part: {
+          type: "string",
+          description: "Nama part utama sebagai jangkar (opsional, jika kosong menggunakan PrimaryPart atau part terbesar).",
+        },
+        placeId: { type: "number", description: "Target Place ID untuk multi-Studio routing." },
+        studioId: { type: "string", description: "Target Studio session ID." },
+      },
+      required: ["target"],
+    },
+  },
+  {
+    name: "mirror_rig",
+    description: "Cerminkan sambungan sendi bilateral (Left <-> Right) sepanjang sumbu simetri X secara matematis, menghemat waktu konfigurasi karakter.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description: "Path Model karakter di Studio (contoh: 'Workspace.Dummy').",
+        },
+        source_side: {
+          type: "string",
+          description: "Sisi sumber yang ingin dicerminkan.",
+          enum: ["Left", "Right"],
+        },
+        placeId: { type: "number", description: "Target Place ID untuk multi-Studio routing." },
+        studioId: { type: "string", description: "Target Studio session ID." },
+      },
+      required: ["target"],
+    },
+  },
 ];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -1026,6 +1393,230 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
 
+      case "scan_vfx": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const payload = JSON.stringify({
+          name: args.name,
+          category: args.category,
+          tags: args.tags,
+          description: args.description,
+        });
+        const scanRes = await dispatchTaskToStudio("scan_vfx", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        if (scanRes && (scanRes.status === "success" || !scanRes.error)) {
+          const scanned = scanRes.result || scanRes;
+          const db = getVfxDatabase();
+          const saved = db.saveVfx({
+            name: scanned.name || args.name || "Scanned_VFX",
+            category: scanned.category || args.category || "Ambient",
+            tags: scanned.tags || args.tags || [],
+            description: scanned.description || args.description,
+            sourcePlaceId: args.placeId,
+            stats: scanned.stats,
+            nodeCount: scanned.nodeCount,
+            data: scanned.data,
+          });
+          result = {
+            status: "success",
+            message: `VFX '${saved.name}' berhasil dipindai dan disimpan ke database persisten MCP dengan ID '${saved.id}'`,
+            item: saved,
+          };
+        } else {
+          throw new Error(scanRes?.error || "Gagal memindai VFX dari Studio.");
+        }
+        break;
+      }
+
+      case "apply_vfx": {
+        const vfxId = String(args.vfx_id ?? "");
+        const target = String(args.target ?? "");
+        if (!vfxId) throw new Error("Parameter 'vfx_id' wajib diisi.");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const db = getVfxDatabase();
+        const item = db.getVfx(vfxId);
+        if (!item) throw new Error(`VFX dengan ID '${vfxId}' tidak ditemukan di database MCP.`);
+        const payload = JSON.stringify({
+          data: item.data,
+          scale: args.scale,
+          enabled: args.enabled,
+        });
+        result = await dispatchTaskToStudio("apply_vfx", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "list_vfx_database": {
+        const db = getVfxDatabase();
+        const items = db.listVfx({ category: args.category, query: args.query });
+        const categories = db.getCategories();
+        result = {
+          total: items.length,
+          categories,
+          items: items.map(i => ({
+            id: i.id,
+            name: i.name,
+            category: i.category,
+            tags: i.tags,
+            description: i.description,
+            nodeCount: i.nodeCount,
+            stats: i.stats,
+            createdAt: i.createdAt,
+          })),
+        };
+        break;
+      }
+
+      case "delete_vfx": {
+        const id = String(args.id ?? "");
+        if (!id) throw new Error("Parameter 'id' wajib diisi.");
+        const db = getVfxDatabase();
+        const deleted = db.deleteVfx(id);
+        if (!deleted) throw new Error(`VFX dengan ID '${id}' tidak ditemukan di database MCP.`);
+        result = { status: "success", message: `VFX '${id}' berhasil dihapus dari database.` };
+        break;
+      }
+
+      case "animate_character": {
+        const target = String(args.target ?? "");
+        const action = String(args.action ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        if (!action) throw new Error("Parameter 'action' wajib diisi.");
+        const payload = JSON.stringify({
+          action,
+          parameters: args.parameters || {},
+          key_poses: args.key_poses,
+        });
+        result = await dispatchTaskToStudio("animate_character", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "solve_limb_ik": {
+        const target = String(args.target ?? "");
+        const limb = String(args.limb ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        if (!limb) throw new Error("Parameter 'limb' wajib diisi.");
+        if (!args.goal || !Array.isArray(args.goal) || args.goal.length < 3) {
+          throw new Error("Parameter 'goal' [X, Y, Z] wajib diisi.");
+        }
+        const payload = JSON.stringify({
+          limb,
+          goal: args.goal,
+          pole: args.pole,
+          apply_to_rig: args.apply_to_rig !== false,
+        });
+        result = await dispatchTaskToStudio("solve_limb_ik", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "scrub_timeline": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const payload = JSON.stringify({
+          time: args.time,
+          action: args.action,
+          emit_vfx: args.emit_vfx !== false,
+          emit_count: args.emit_count,
+          enabled: args.enabled,
+        });
+        result = await dispatchTaskToStudio("scrub_timeline", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "inspect_rig": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const payload = JSON.stringify({ action: "inspect" });
+        result = await dispatchTaskToStudio("edit_rig", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "edit_rig_joint": {
+        const target = String(args.target ?? "");
+        const action = String(args.action ?? "edit_pivot");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const payload = JSON.stringify({
+          action,
+          joint_name: args.joint_name,
+          part0: args.part0,
+          part1: args.part1,
+          delta_world: args.delta_world,
+          target_world: args.target_world,
+          rotate_euler_deg: args.rotate_euler_deg,
+          align_to: args.align_to,
+          reanchor: args.reanchor,
+        });
+        result = await dispatchTaskToStudio("edit_rig", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "auto_rig": {
+        const target = String(args.target ?? "");
+        const rigType = String(args.rig_type ?? "R15");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        let action = "auto_rig_r15";
+        if (rigType === "R6") action = "auto_rig_r6";
+        else if (rigType === "Weapon") action = "rig_weapon";
+
+        const payload = JSON.stringify({
+          action,
+          weapon_target: args.weapon_target,
+          target_limb: args.target_limb,
+        });
+        result = await dispatchTaskToStudio("edit_rig", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "weld_assembly": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const payload = JSON.stringify({
+          action: "weld_assembly",
+          primary_part: args.primary_part,
+        });
+        result = await dispatchTaskToStudio("edit_rig", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
+      case "mirror_rig": {
+        const target = String(args.target ?? "");
+        if (!target) throw new Error("Parameter 'target' wajib diisi.");
+        const payload = JSON.stringify({
+          action: "mirror",
+          source_side: args.source_side || "Left",
+        });
+        result = await dispatchTaskToStudio("edit_rig", target, payload, {
+          placeId: args.placeId,
+          studioId: args.studioId,
+        });
+        break;
+      }
+
       case "call_mcp_tool": {
         const { command, target, data, placeId, studioId } = args as {
           command: string;
@@ -1058,6 +1649,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (command === "search_asset" && data) {
           const queryParams = typeof data === "string" ? JSON.parse(data) : data;
           result = await handleSearchAsset(queryParams.keyword || "", queryParams.category);
+          break;
+        }
+
+        // Intercept VFX database tools di Node.js
+        if (command === "list_vfx_database") {
+          const queryParams = typeof data === "string" ? JSON.parse(data || "{}") : (data || {});
+          const db = getVfxDatabase();
+          result = {
+            total: db.listVfx(queryParams).length,
+            categories: db.getCategories(),
+            items: db.listVfx(queryParams),
+          };
+          break;
+        }
+
+        if (command === "delete_vfx") {
+          const queryParams = typeof data === "string" ? JSON.parse(data || "{}") : (data || {});
+          const db = getVfxDatabase();
+          const ok = db.deleteVfx(queryParams.id || target || "");
+          result = { success: ok };
+          break;
+        }
+
+        if (command === "apply_vfx") {
+          const queryParams = typeof data === "string" ? JSON.parse(data || "{}") : (data || {});
+          const db = getVfxDatabase();
+          const item = db.getVfx(queryParams.vfx_id || queryParams.id || "");
+          if (!item) throw new Error("VFX tidak ditemukan di database MCP.");
+          const payload = JSON.stringify({ data: item.data, scale: queryParams.scale, enabled: queryParams.enabled });
+          result = await dispatchTaskToStudio("apply_vfx", target || queryParams.target || "Workspace", payload, { placeId, studioId });
           break;
         }
 

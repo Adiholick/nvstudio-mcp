@@ -684,6 +684,410 @@
             font-size: 12px;
         }
 
+        /* ── VFX Database & Library Styles ── */
+        .vfx-sidebar-badge {
+            font-size: 10px;
+            font-weight: 700;
+            background: var(--accent);
+            color: #fff;
+            padding: 1px 7px;
+            border-radius: 10px;
+            margin-left: auto;
+            letter-spacing: 0.02em;
+        }
+
+        .vfx-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 24px 32px 60px 32px;
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        .vfx-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .vfx-header-info h2 {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .vfx-header-info p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .vfx-actions-bar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .vfx-btn-primary {
+            background: linear-gradient(135deg, #0088cc 0%, #00aaff 100%);
+            color: #fff;
+            font-weight: 600;
+            font-size: 13px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px var(--accent-glow);
+            transition: all 0.2s;
+        }
+        .vfx-btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px var(--accent-glow);
+            filter: brightness(1.1);
+        }
+
+        .vfx-btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+            border: 1px solid var(--border);
+            font-weight: 600;
+            font-size: 13px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .vfx-btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--border-highlight);
+        }
+
+        .vfx-search-box {
+            position: relative;
+            flex: 1;
+            min-width: 260px;
+            max-width: 480px;
+        }
+        .vfx-search-box input {
+            width: 100%;
+            background: #0d0d0d;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 9px 14px 9px 36px;
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .vfx-search-box input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+        .vfx-search-box svg {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 15px;
+            height: 15px;
+            color: var(--text-dim);
+        }
+
+        /* Category Filter Pills */
+        .vfx-category-tabs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 6px;
+        }
+        .vfx-cat-pill {
+            background: #18181d;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .vfx-cat-pill:hover {
+            color: var(--text);
+            border-color: var(--border-highlight);
+            background: #222228;
+        }
+        .vfx-cat-pill.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+            box-shadow: 0 2px 10px var(--accent-glow);
+        }
+        .vfx-cat-count {
+            font-size: 10px;
+            background: rgba(0, 0, 0, 0.35);
+            padding: 1px 6px;
+            border-radius: 10px;
+            opacity: 0.9;
+        }
+
+        /* Summary Stats Cards */
+        .vfx-stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+        }
+        .vfx-stat-box {
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .vfx-stat-label { font-size: 11px; text-transform: uppercase; color: var(--text-dim); font-weight: 600; letter-spacing: 0.05em; }
+        .vfx-stat-val { font-size: 24px; font-weight: 700; color: var(--text); }
+        .vfx-stat-sub { font-size: 12px; color: var(--text-muted); }
+
+        /* VFX Grid & Cards */
+        .vfx-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+        }
+        .vfx-card {
+            background: #18181d;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+        }
+        .vfx-card:hover {
+            border-color: rgba(0, 170, 255, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .vfx-card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .vfx-card-title-group h4 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: -0.01em;
+        }
+        .vfx-card-date {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+
+        .vfx-badge-cat {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 3px 8px;
+            border-radius: 6px;
+            letter-spacing: 0.04em;
+        }
+        .vfx-badge-Slash { background: rgba(0, 170, 255, 0.15); color: #00aaff; border: 1px solid rgba(0, 170, 255, 0.3); }
+        .vfx-badge-Explosion { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .vfx-badge-Aura { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .vfx-badge-Magic { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+        .vfx-badge-Impact { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .vfx-badge-Beam { background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); }
+        .vfx-badge-Projectile { background: rgba(236, 72, 153, 0.15); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.3); }
+        .vfx-badge-Ambient { background: rgba(161, 161, 170, 0.15); color: #a1a1aa; border: 1px solid rgba(161, 161, 170, 0.3); }
+
+        .vfx-card-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.5;
+            min-height: 38px;
+        }
+
+        .vfx-composition-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .vfx-comp-pill {
+            font-size: 11px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-muted);
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .vfx-card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .vfx-tag-chip {
+            font-size: 11px;
+            color: var(--text-dim);
+            background: #0d0d0d;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .vfx-card-footer {
+            margin-top: auto;
+            display: flex;
+            gap: 8px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .vfx-btn-apply {
+            flex: 1;
+            background: rgba(0, 170, 255, 0.12);
+            color: var(--accent);
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 7px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .vfx-btn-apply:hover {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        .vfx-btn-json {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            font-size: 12px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .vfx-btn-json:hover {
+            background: rgba(255, 255, 255, 0.09);
+            color: var(--text);
+        }
+
+        .vfx-btn-del {
+            background: rgba(239, 68, 68, 0.08);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            font-size: 12px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .vfx-btn-del:hover {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        /* Modals */
+        .vfx-modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .vfx-modal-backdrop.open { display: flex; }
+        .vfx-modal-card {
+            background: #18181d;
+            border: 1px solid var(--border-highlight);
+            border-radius: 12px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+        }
+        .vfx-modal-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .vfx-modal-header h3 { font-size: 16px; font-weight: 600; color: #fff; }
+        .vfx-modal-close {
+            background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 20px; line-height: 1;
+        }
+        .vfx-modal-close:hover { color: #fff; }
+        .vfx-modal-body {
+            padding: 20px 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .vfx-modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .vfx-form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .vfx-form-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+        .vfx-form-input, .vfx-form-select {
+            background: #0d0d0d;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 9px 12px;
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+        }
+        .vfx-form-input:focus, .vfx-form-select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 8px var(--accent-glow);
+        }
+
         /* Scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -734,6 +1138,11 @@
             </div>
 
             <div class="nav-group-label" style="margin-top:20px;">Engine Tools</div>
+            <div class="nav-item" data-page="vfx-database">
+                <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                VFX Database
+                <span class="vfx-sidebar-badge" id="vfx-sidebar-count">0</span>
+            </div>
             <div class="nav-item" data-page="docs">
                 <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                 Docs Explorer
@@ -917,6 +1326,160 @@
                 </div>
             </div>
 
+            <!-- VFX Database & Library Page -->
+            <div class="page" id="page-vfx-database">
+                <div class="vfx-container">
+                    <div class="vfx-header">
+                        <div class="vfx-header-info">
+                            <h2>✨ NV-VFX Library & Database <span class="v2-chip" id="vfx-hero-badge">Portable</span></h2>
+                            <p>Katalog efek visual portabel lintas-proyek Roblox (ParticleEmitter, Beam, Trail, Light). Pindai dari satu place dan pasang ke place lain secara instan.</p>
+                        </div>
+                        <div class="vfx-actions-bar">
+                            <div class="vfx-search-box">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                <input type="text" id="vfx-search-input" placeholder="Cari VFX berdasarkan nama, tag, atau kategori...">
+                            </div>
+                            <button class="vfx-btn-primary" id="btn-open-scan-modal">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Scan dari Studio
+                            </button>
+                            <button class="vfx-btn-secondary" id="btn-refresh-vfx" title="Muat ulang data">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Category Pills Segment Bar -->
+                    <div class="vfx-category-tabs" id="vfx-category-tabs">
+                        <button class="vfx-cat-pill active" data-cat="All">Semua <span class="vfx-cat-count" id="vfx-count-all">0</span></button>
+                    </div>
+
+                    <!-- Stats Overview Row -->
+                    <div class="vfx-stats-row">
+                        <div class="vfx-stat-box">
+                            <div class="vfx-stat-label">Total Efek Visual</div>
+                            <div class="vfx-stat-val" id="vfx-stat-total">0</div>
+                            <div class="vfx-stat-sub">Tersimpan di database MCP</div>
+                        </div>
+                        <div class="vfx-stat-box">
+                            <div class="vfx-stat-label">Kategori Aktif</div>
+                            <div class="vfx-stat-val" id="vfx-stat-categories" style="color:#00aaff;">0</div>
+                            <div class="vfx-stat-sub">Slash, Aura, Magic, Explosion dll</div>
+                        </div>
+                        <div class="vfx-stat-box">
+                            <div class="vfx-stat-label">Total Emitters</div>
+                            <div class="vfx-stat-val" id="vfx-stat-emitters" style="color:#f59e0b;">0</div>
+                            <div class="vfx-stat-sub">ParticleEmitter aktif</div>
+                        </div>
+                        <div class="vfx-stat-box">
+                            <div class="vfx-stat-label">Beams & Trails</div>
+                            <div class="vfx-stat-val" id="vfx-stat-beams" style="color:#10b981;">0</div>
+                            <div class="vfx-stat-sub">Elemen trajektori & sinar</div>
+                        </div>
+                    </div>
+
+                    <!-- Cards Grid -->
+                    <div class="vfx-grid" id="vfx-cards-grid">
+                        <!-- Kartu VFX di-render secara dinamis oleh JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal: Scan VFX dari Studio -->
+            <div class="vfx-modal-backdrop" id="modal-scan-vfx">
+                <div class="vfx-modal-card">
+                    <div class="vfx-modal-header">
+                        <h3>📥 Pindai VFX dari Studio Aktif</h3>
+                        <button class="vfx-modal-close" onclick="closeVfxModals()">&times;</button>
+                    </div>
+                    <div class="vfx-modal-body">
+                        <div class="vfx-form-group">
+                            <label class="vfx-form-label">Path Objek di Studio (Target)</label>
+                            <input type="text" class="vfx-form-input" id="scan-input-target" placeholder="contoh: Workspace.FlameBurst atau Selection" value="Workspace.">
+                        </div>
+                        <div class="vfx-form-group">
+                            <label class="vfx-form-label">Nama VFX</label>
+                            <input type="text" class="vfx-form-input" id="scan-input-name" placeholder="contoh: Crimson_Flame_Slash">
+                        </div>
+                        <div class="vfx-form-group">
+                            <label class="vfx-form-label">Kategori</label>
+                            <select class="vfx-form-select" id="scan-select-category">
+                                <option value="Slash">Slash (Tebasan & Bilah)</option>
+                                <option value="Explosion">Explosion (Ledakan & Api)</option>
+                                <option value="Aura">Aura (Glow & Perisai)</option>
+                                <option value="Magic">Magic (Sihir & Lingkaran Rune)</option>
+                                <option value="Beam">Beam (Laser & Sinar Energi)</option>
+                                <option value="Impact">Impact (Benturan & Hantaman)</option>
+                                <option value="Projectile">Projectile (Proyektil & Peluru)</option>
+                                <option value="Ambient">Ambient (Lingkungan & Partikel Halus)</option>
+                            </select>
+                        </div>
+                        <div class="vfx-form-group">
+                            <label class="vfx-form-label">Tags (Pisahkan dengan koma)</label>
+                            <input type="text" class="vfx-form-input" id="scan-input-tags" placeholder="contoh: anime, sword, fire, fast">
+                        </div>
+                    </div>
+                    <div class="vfx-modal-footer">
+                        <button class="vfx-btn-secondary" onclick="closeVfxModals()">Batal</button>
+                        <button class="vfx-btn-primary" id="btn-submit-scan">Mulai Pindai</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal: Apply VFX ke Studio -->
+            <div class="vfx-modal-backdrop" id="modal-apply-vfx">
+                <div class="vfx-modal-card">
+                    <div class="vfx-modal-header">
+                        <h3>⚡ Terapkan VFX ke Studio</h3>
+                        <button class="vfx-modal-close" onclick="closeVfxModals()">&times;</button>
+                    </div>
+                    <div class="vfx-modal-body">
+                        <input type="hidden" id="apply-vfx-id">
+                        <div class="vfx-form-group">
+                            <label class="vfx-form-label">VFX Terpilih</label>
+                            <div id="apply-vfx-title" style="font-weight:600; color:var(--accent);"></div>
+                        </div>
+                        <div class="vfx-form-group">
+                            <label class="vfx-form-label">Target Instance di Studio</label>
+                            <input type="text" class="vfx-form-input" id="apply-input-target" placeholder="contoh: Workspace.Dummy.RightHand atau Workspace" value="Workspace">
+                        </div>
+                        <div class="vfx-form-group">
+                            <label class="vfx-form-label">Skala Ukuran (Scale Factor)</label>
+                            <input type="number" class="vfx-form-input" id="apply-input-scale" value="1.0" step="0.1" min="0.1" max="10">
+                        </div>
+                        <div class="vfx-form-group">
+                            <label class="vfx-form-label">Status Partikel (Enabled)</label>
+                            <select class="vfx-form-select" id="apply-select-enabled">
+                                <option value="default">Sesuai Preset / Default</option>
+                                <option value="true">Paksa Aktif (Enabled = true)</option>
+                                <option value="false">Paksa Nonaktif (Enabled = false)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="vfx-modal-footer">
+                        <button class="vfx-btn-secondary" onclick="closeVfxModals()">Batal</button>
+                        <button class="vfx-btn-primary" id="btn-submit-apply">Terapkan Sekarang</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal: View JSON / Inspect Data -->
+            <div class="vfx-modal-backdrop" id="modal-json-vfx">
+                <div class="vfx-modal-card" style="max-width:700px;">
+                    <div class="vfx-modal-header">
+                        <h3 id="json-modal-title">Inspeksi Data Murni VFX</h3>
+                        <button class="vfx-modal-close" onclick="closeVfxModals()">&times;</button>
+                    </div>
+                    <div class="vfx-modal-body" style="padding:0;">
+                        <pre id="json-modal-content" style="background:#0d0d0d; padding:16px; margin:0; font-family:'JetBrains Mono', monospace; font-size:12px; color:#e0e0e0; overflow:auto; max-height:55vh;"></pre>
+                    </div>
+                    <div class="vfx-modal-footer">
+                        <button class="vfx-btn-secondary" id="btn-copy-vfx-json">Salin JSON</button>
+                        <button class="vfx-btn-primary" onclick="closeVfxModals()">Tutup</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- About Page -->
             <div class="page" id="page-about">
                 <div class="about-section">
@@ -990,6 +1553,7 @@
     const pageTitles = { 
         activity: 'Activity Log', 
         stats: 'Session Diagnostics & Studios', 
+        'vfx-database': 'NV-VFX Database & Library',
         docs: 'Roblox Docs Explorer', 
         about: 'About v2.3' 
     };
@@ -1083,7 +1647,13 @@
     }
 
     function escapeHtml(str) {
-        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     function shouldShowLog(log) {
@@ -1364,6 +1934,329 @@
         }
     });
 
+    /* ── VFX Database & Library Controller ── */
+    let currentVfxItems = [];
+    let currentVfxCategories = [];
+    let activeVfxCategory = 'All';
+    let vfxSearchTimeout = null;
+
+    const vfxSidebarCount = document.getElementById('vfx-sidebar-count');
+    const vfxCategoryTabs = document.getElementById('vfx-category-tabs');
+    const vfxCardsGrid = document.getElementById('vfx-cards-grid');
+    const vfxSearchInput = document.getElementById('vfx-search-input');
+    const vfxStatTotal = document.getElementById('vfx-stat-total');
+    const vfxStatCategories = document.getElementById('vfx-stat-categories');
+    const vfxStatEmitters = document.getElementById('vfx-stat-emitters');
+    const vfxStatBeams = document.getElementById('vfx-stat-beams');
+
+    const modalScanVfx = document.getElementById('modal-scan-vfx');
+    const modalApplyVfx = document.getElementById('modal-apply-vfx');
+    const modalJsonVfx = document.getElementById('modal-json-vfx');
+
+    window.closeVfxModals = function() {
+        modalScanVfx.classList.remove('open');
+        modalApplyVfx.classList.remove('open');
+        modalJsonVfx.classList.remove('open');
+    };
+
+    window.openApplyModal = function(id) {
+        const decodedId = decodeURIComponent(id);
+        const item = currentVfxItems.find(i => i.id === decodedId);
+        if (!item) return;
+        document.getElementById('apply-vfx-id').value = item.id;
+        document.getElementById('apply-vfx-title').textContent = item.name;
+        modalApplyVfx.classList.add('open');
+    };
+
+    window.openJsonModal = function(id) {
+        const decodedId = decodeURIComponent(id);
+        const item = currentVfxItems.find(i => i.id === decodedId);
+        if (!item) return;
+        document.getElementById('json-modal-title').textContent = 'Pure Data: ' + item.name;
+        document.getElementById('json-modal-content').textContent = JSON.stringify(item.data, null, 2);
+        modalJsonVfx.classList.add('open');
+    };
+
+    window.deleteVfxItem = async function(id) {
+        const decodedId = decodeURIComponent(id);
+        const item = currentVfxItems.find(i => i.id === decodedId);
+        const name = item ? item.name : decodedId;
+        if (!confirm(`Apakah Anda yakin ingin menghapus VFX "${name}" dari database?`)) return;
+        try {
+            const res = await fetch('/api/vfx/' + encodeURIComponent(decodedId), { method: 'DELETE' });
+            if (res.ok) {
+                loadVfxDatabase();
+            } else {
+                alert('Gagal menghapus VFX');
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+    };
+
+    async function loadVfxDatabase() {
+        try {
+            const [vfxRes, catRes] = await Promise.all([
+                fetch('/api/vfx' + (activeVfxCategory !== 'All' ? `?category=${encodeURIComponent(activeVfxCategory)}` : '')),
+                fetch('/api/vfx/categories')
+            ]);
+            if (!vfxRes.ok || !catRes.ok) return;
+
+            const vfxData = await vfxRes.json();
+            const catData = await catRes.json();
+
+            currentVfxItems = vfxData.items || [];
+            currentVfxCategories = catData.categories || [];
+
+            renderVfxCategories();
+            renderVfxStats();
+            renderVfxCards();
+
+            // Hitung total di sidebar
+            let totalCount = 0;
+            currentVfxCategories.forEach(c => totalCount += c.count);
+            if (vfxSidebarCount) vfxSidebarCount.textContent = totalCount;
+        } catch (err) {
+            console.error('Gagal memuat VFX Database:', err);
+        }
+    }
+
+    function renderVfxCategories() {
+        if (!vfxCategoryTabs) return;
+        let totalCount = 0;
+        currentVfxCategories.forEach(c => totalCount += c.count);
+
+        let html = `
+            <button class="vfx-cat-pill ${activeVfxCategory === 'All' ? 'active' : ''}" data-cat="All">
+                Semua <span class="vfx-cat-count">${totalCount}</span>
+            </button>
+        `;
+
+        currentVfxCategories.forEach(cat => {
+            html += `
+                <button class="vfx-cat-pill ${activeVfxCategory === cat.name ? 'active' : ''}" data-cat="${escapeHtml(cat.name)}">
+                    ${escapeHtml(cat.name)} <span class="vfx-cat-count">${cat.count}</span>
+                </button>
+            `;
+        });
+
+        vfxCategoryTabs.innerHTML = html;
+
+        vfxCategoryTabs.querySelectorAll('.vfx-cat-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                activeVfxCategory = btn.dataset.cat;
+                vfxCategoryTabs.querySelectorAll('.vfx-cat-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadVfxDatabase();
+            });
+        });
+    }
+
+    function renderVfxStats() {
+        let totalCount = 0;
+        let totalEmitters = 0;
+        let totalBeams = 0;
+
+        currentVfxItems.forEach(item => {
+            totalCount++;
+            if (item.stats) {
+                totalEmitters += (item.stats.emitters || 0);
+                totalBeams += ((item.stats.beams || 0) + (item.stats.trails || 0));
+            }
+        });
+
+        if (vfxStatTotal) vfxStatTotal.textContent = totalCount;
+        if (vfxStatCategories) vfxStatCategories.textContent = currentVfxCategories.length;
+        if (vfxStatEmitters) vfxStatEmitters.textContent = totalEmitters;
+        if (vfxStatBeams) vfxStatBeams.textContent = totalBeams;
+    }
+
+    function renderVfxCards() {
+        if (!vfxCardsGrid) return;
+        if (currentVfxItems.length === 0) {
+            vfxCardsGrid.innerHTML = `
+                <div style="grid-column: 1 / -1; padding: 48px; text-align: center; color: var(--text-dim); background: var(--surface-card); border: 1px dashed var(--border); border-radius: 12px;">
+                    <div style="font-size: 32px; margin-bottom: 8px;">✨</div>
+                    <div style="font-size: 15px; font-weight: 600; color: var(--text);">Belum ada efek visual di kategori ini</div>
+                    <div style="font-size: 13px; margin-top: 4px;">Klik tombol "Scan dari Studio" di atas untuk memindai partikel dari proyek aktif Anda.</div>
+                </div>
+            `;
+            return;
+        }
+
+        const filterQuery = (vfxSearchInput ? vfxSearchInput.value.toLowerCase().trim() : '');
+        const items = filterQuery
+            ? currentVfxItems.filter(i => 
+                i.name.toLowerCase().includes(filterQuery) || 
+                i.category.toLowerCase().includes(filterQuery) || 
+                (i.description && i.description.toLowerCase().includes(filterQuery)) ||
+                (i.tags && i.tags.some(t => t.toLowerCase().includes(filterQuery))))
+            : currentVfxItems;
+
+        vfxCardsGrid.innerHTML = items.map(item => {
+            const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' }) : 'NVStudio';
+            const stats = item.stats || { emitters: 0, beams: 0, trails: 0, lights: 0 };
+            const compPills = [];
+            if (stats.emitters > 0) compPills.push(`${stats.emitters} Emitters`);
+            if (stats.beams > 0) compPills.push(`${stats.beams} Beams`);
+            if (stats.trails > 0) compPills.push(`${stats.trails} Trails`);
+            if (stats.lights > 0) compPills.push(`${stats.lights} Lights`);
+            if (compPills.length === 0) compPills.push(`${item.nodeCount || 1} Nodes`);
+
+            const tagChips = (item.tags || []).slice(0, 4).map(t => `<span class="vfx-tag-chip">#${escapeHtml(t)}</span>`).join('');
+
+            return `
+                <div class="vfx-card">
+                    <div class="vfx-card-top">
+                        <div class="vfx-card-title-group">
+                            <h4>${escapeHtml(item.name)}</h4>
+                            <div class="vfx-card-date">${escapeHtml(dateStr)} • ${escapeHtml(item.author || 'NVStudio')}</div>
+                        </div>
+                        <span class="vfx-badge-cat vfx-badge-${escapeHtml(item.category || 'Ambient')}">${escapeHtml(item.category || 'Ambient')}</span>
+                    </div>
+
+                    <div class="vfx-card-desc">${escapeHtml(item.description || 'Efek visual siap pakai untuk proyek Roblox.')}</div>
+
+                    <div class="vfx-composition-badges">
+                        ${compPills.map(p => `<span class="vfx-comp-pill">${escapeHtml(p)}</span>`).join('')}
+                    </div>
+
+                    ${tagChips ? `<div class="vfx-card-tags">${tagChips}</div>` : ''}
+
+                    <div class="vfx-card-footer">
+                        <button class="vfx-btn-apply" onclick="openApplyModal('${encodeURIComponent(item.id)}')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                            Apply ke Studio
+                        </button>
+                        <button class="vfx-btn-json" title="Inspeksi Data JSON" onclick="openJsonModal('${encodeURIComponent(item.id)}')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        </button>
+                        <button class="vfx-btn-del" title="Hapus dari Database" onclick="deleteVfxItem('${encodeURIComponent(item.id)}')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Search debounce
+    if (vfxSearchInput) {
+        vfxSearchInput.addEventListener('input', () => {
+            clearTimeout(vfxSearchTimeout);
+            vfxSearchTimeout = setTimeout(() => {
+                renderVfxCards();
+            }, 180);
+        });
+    }
+
+    // Modal triggers & handlers
+    const btnOpenScanModal = document.getElementById('btn-open-scan-modal');
+    if (btnOpenScanModal) {
+        btnOpenScanModal.addEventListener('click', () => {
+            modalScanVfx.classList.add('open');
+        });
+    }
+
+    const btnRefreshVfx = document.getElementById('btn-refresh-vfx');
+    if (btnRefreshVfx) {
+        btnRefreshVfx.addEventListener('click', () => {
+            loadVfxDatabase();
+        });
+    }
+
+    // Submit Scan form
+    const btnSubmitScan = document.getElementById('btn-submit-scan');
+    if (btnSubmitScan) {
+        btnSubmitScan.addEventListener('click', async () => {
+            const target = document.getElementById('scan-input-target').value.trim();
+            const name = document.getElementById('scan-input-name').value.trim();
+            const category = document.getElementById('scan-select-category').value;
+            const tags = document.getElementById('scan-input-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+
+            if (!target) {
+                alert('Harap isi path target di Studio');
+                return;
+            }
+
+            btnSubmitScan.disabled = true;
+            btnSubmitScan.textContent = 'Memindai...';
+            try {
+                const res = await fetch('/api/vfx/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target, name, category, tags })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    closeVfxModals();
+                    loadVfxDatabase();
+                    alert(`✅ Sukses memindai VFX "${data.item.name}" (${data.item.nodeCount} node)!`);
+                } else {
+                    alert('Gagal scan: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
+                btnSubmitScan.disabled = false;
+                btnSubmitScan.textContent = 'Mulai Pindai';
+            }
+        });
+    }
+
+    // Submit Apply form
+    const btnSubmitApply = document.getElementById('btn-submit-apply');
+    if (btnSubmitApply) {
+        btnSubmitApply.addEventListener('click', async () => {
+            const id = document.getElementById('apply-vfx-id').value;
+            const target = document.getElementById('apply-input-target').value.trim();
+            const scale = parseFloat(document.getElementById('apply-input-scale').value) || 1.0;
+            const enabledVal = document.getElementById('apply-select-enabled').value;
+            const enabled = enabledVal === 'default' ? undefined : (enabledVal === 'true');
+
+            if (!target) {
+                alert('Harap isi target di Studio');
+                return;
+            }
+
+            btnSubmitApply.disabled = true;
+            btnSubmitApply.textContent = 'Menerapkan...';
+            try {
+                const res = await fetch('/api/vfx/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, target, scale, enabled })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    closeVfxModals();
+                    alert(`✅ VFX berhasil diterapkan ke "${target}" di Studio!`);
+                } else {
+                    alert('Gagal apply: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
+                btnSubmitApply.disabled = false;
+                btnSubmitApply.textContent = 'Terapkan Sekarang';
+            }
+        });
+    }
+
+    // Copy JSON button
+    const btnCopyVfxJson = document.getElementById('btn-copy-vfx-json');
+    if (btnCopyVfxJson) {
+        btnCopyVfxJson.addEventListener('click', () => {
+            const content = document.getElementById('json-modal-content').textContent;
+            navigator.clipboard.writeText(content);
+            btnCopyVfxJson.textContent = 'Tersalin ✓';
+            setTimeout(() => { btnCopyVfxJson.textContent = 'Salin JSON'; }, 1500);
+        });
+    }
+
+    // Muat VFX Database saat pertama kali dibuka
+    loadVfxDatabase();
+
     /* ── Socket.IO Event Listeners ── */
     socket.on('connect', () => {});
     socket.on('disconnect', () => setStudioStatus(false));
@@ -1383,6 +2276,10 @@
 
     socket.on('stats', (s) => {
         updateStats(s);
+    });
+
+    socket.on('vfx_updated', () => {
+        loadVfxDatabase();
     });
 
     socket.on('studio-status', ({ connected, studioCount, connectedStudios, version }) => {

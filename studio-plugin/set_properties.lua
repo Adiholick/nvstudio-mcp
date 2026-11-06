@@ -33,6 +33,79 @@ return function(targetInstance, data, ctx, targetPath)
                 targetInstance[prop] = BrickColor.new(val)
             elseif typeof(currentVal) == "CFrame" and type(val) == "table" then
                 targetInstance[prop] = CFrame.new(unpack(val))
+            elseif typeof(currentVal) == "ColorSequence" or (type(val) == "table" and val.t == "ColorSequence") then
+                local kps = {}
+                local rawList = (type(val) == "table" and val.t == "ColorSequence") and val.v or val
+                if type(rawList) == "table" then
+                    for _, kp in ipairs(rawList) do
+                        local t = kp[1] or 0
+                        local col = kp[2]
+                        local c3
+                        if typeof(col) == "Color3" then
+                            c3 = col
+                        elseif type(col) == "table" and col.t == "Color3" then
+                            c3 = Color3.new(col.v[1], col.v[2], col.v[3])
+                        elseif type(col) == "table" and #col >= 3 then
+                            c3 = (col[1] > 1 or col[2] > 1 or col[3] > 1) and Color3.fromRGB(col[1], col[2], col[3]) or Color3.new(col[1], col[2], col[3])
+                        else
+                            c3 = Color3.new(1, 1, 1)
+                        end
+                        table.insert(kps, ColorSequenceKeypoint.new(math.clamp(t, 0, 1), c3))
+                    end
+                end
+                if #kps >= 2 then
+                    table.sort(kps, function(a, b) return a.Time < b.Time end)
+                    -- Pastikan keypoint pertama t=0 dan terakhir t=1
+                    if kps[1].Time ~= 0 then
+                        kps[1] = ColorSequenceKeypoint.new(0, kps[1].Value)
+                    end
+                    if kps[#kps].Time ~= 1 then
+                        kps[#kps] = ColorSequenceKeypoint.new(1, kps[#kps].Value)
+                    end
+                    -- Pastikan waktu meningkat secara monoton murni
+                    for i = 2, #kps do
+                        if kps[i].Time <= kps[i - 1].Time then
+                            local newT = math.min(1.0, kps[i - 1].Time + 0.001)
+                            kps[i] = ColorSequenceKeypoint.new(newT, kps[i].Value)
+                        end
+                    end
+                    targetInstance[prop] = ColorSequence.new(kps)
+                elseif #kps == 1 then
+                    targetInstance[prop] = ColorSequence.new(kps[1].Value)
+                end
+            elseif typeof(currentVal) == "NumberSequence" or (type(val) == "table" and val.t == "NumberSequence") then
+                local kps = {}
+                local rawList = (type(val) == "table" and val.t == "NumberSequence") and val.v or val
+                if type(rawList) == "table" then
+                    for _, kp in ipairs(rawList) do
+                        if type(kp) == "table" then
+                            local t = kp[1] or 0
+                            local v = kp[2] or 0
+                            local env = kp[3] or 0
+                            table.insert(kps, NumberSequenceKeypoint.new(math.clamp(t, 0, 1), v, env))
+                        end
+                    end
+                end
+                if #kps >= 2 then
+                    table.sort(kps, function(a, b) return a.Time < b.Time end)
+                    -- Pastikan keypoint pertama t=0 dan terakhir t=1
+                    if kps[1].Time ~= 0 then
+                        kps[1] = NumberSequenceKeypoint.new(0, kps[1].Value, kps[1].Envelope)
+                    end
+                    if kps[#kps].Time ~= 1 then
+                        kps[#kps] = NumberSequenceKeypoint.new(1, kps[#kps].Value, kps[#kps].Envelope)
+                    end
+                    -- Pastikan waktu meningkat secara monoton murni
+                    for i = 2, #kps do
+                        if kps[i].Time <= kps[i - 1].Time then
+                            local newT = math.min(1.0, kps[i - 1].Time + 0.001)
+                            kps[i] = NumberSequenceKeypoint.new(newT, kps[i].Value, kps[i].Envelope)
+                        end
+                    end
+                    targetInstance[prop] = NumberSequence.new(kps)
+                elseif #kps == 1 then
+                    targetInstance[prop] = NumberSequence.new(kps[1].Value)
+                end
             elseif typeof(currentVal) == "EnumItem" and type(val) == "string" then
                 local enumType = tostring(currentVal.EnumType)
                 local successEnum, enumValue = pcall(function() return Enum[enumType][val] end)
