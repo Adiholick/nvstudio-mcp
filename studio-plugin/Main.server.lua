@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════
--- NVStudio MCP Plugin v2.4.1
+-- NVStudio MCP Plugin v2.4.2
 -- Arsitektur: Dual-Mode WebSocket Duplex (Port 3055/ws) + Fallback Long-Polling
 -- Plugin auto-connect saat dimuat via WebSocket native, dengan fallback otomatis
 -- ke HTTP stream jika WebSocket tidak tersedia di environment Roblox Studio ini.

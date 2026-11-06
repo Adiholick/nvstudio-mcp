@@ -174,7 +174,13 @@ function syncRuntimeAndPlugins() {
                 fs.cpSync(publicSrc, publicDest, { recursive: true, force: true });
             }
 
-            console.log(`[Build] ✅ Berhasil menyinkronkan runtime ${nvRuntimeDir} (dist, public, studio-plugin, src)`);
+            const dataSrc = path.join(rootDir, 'data');
+            const dataDest = path.join(nvRuntimeDir, 'data');
+            if (fs.existsSync(dataSrc)) {
+                fs.cpSync(dataSrc, dataDest, { recursive: true, force: true });
+            }
+
+            console.log(`[Build] ✅ Berhasil menyinkronkan runtime ${nvRuntimeDir} (dist, public, studio-plugin, src, data)`);
         } catch (err: any) {
             console.warn(`[Build] Gagal menyinkronkan ke ~/.nvstudio-mcp: ${err.message}`);
         }

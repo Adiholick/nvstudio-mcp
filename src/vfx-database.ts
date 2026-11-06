@@ -23,6 +23,7 @@ export interface VfxItem {
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'vfx-database.json');
+const BUNDLED_DB_FILE = path.join(__dirname, '..', 'data', 'vfx-database.json');
 
 // ── Default Seed Presets ───────────────────────────────────────────────────────
 const DEFAULT_PRESETS: VfxItem[] = [
@@ -424,9 +425,14 @@ export class VfxDatabase {
   }
 
   private loadDatabase() {
-    if (fs.existsSync(DB_FILE)) {
+    let targetFile = DB_FILE;
+    if (!fs.existsSync(targetFile) && fs.existsSync(BUNDLED_DB_FILE)) {
+      targetFile = BUNDLED_DB_FILE;
+    }
+
+    if (fs.existsSync(targetFile)) {
       try {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+        const raw = fs.readFileSync(targetFile, 'utf-8');
         const list: VfxItem[] = JSON.parse(raw);
         for (const item of list) {
           item.category = normalizeVfxCategory(item.category);
