@@ -976,7 +976,7 @@ end
 				<BinaryString name="Tags"></BinaryString>
 				<token name="RunContext">0</token>
 				<ProtectedString name="Source"><![CDATA[-- ══════════════════════════════════════════════════════════════════════
--- NVStudio MCP Plugin v2.4.0
+-- NVStudio MCP Plugin v2.4.1
 -- Arsitektur: Dual-Mode WebSocket Duplex (Port 3055/ws) + Fallback Long-Polling
 -- Plugin auto-connect saat dimuat via WebSocket native, dengan fallback otomatis
 -- ke HTTP stream jika WebSocket tidak tersedia di environment Roblox Studio ini.
@@ -5584,7 +5584,7 @@ function UIManager.init(pluginInstance, studioId)
 
     -- Version
     local versionLabel = Instance.new("TextLabel")
-    versionLabel.Text = "v2.4.0"
+    versionLabel.Text = "v2.4.1"
     versionLabel.Font = Enum.Font.Gotham
     versionLabel.TextSize = 11
     versionLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
