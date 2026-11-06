@@ -41,3 +41,23 @@ Setiap pembuatan atau modifikasi GUI di `StarterGui` WAJIB mematuhi standar NV-S
 - ATURAN UNANCHOR: Seluruh part anak (`Part1`) yang digerakkan oleh `Motor6D` atau `Weld` WAJIB disetel `Anchored = false`. Part yang ter-anchor tidak akan bergerak saat dianimasikan.
 - URUTAN RIGGING SEBELUM ANIMASI: Selalu jalankan `inspect_rig` atau `auto_rig` sebelum memanggil `animate_character` pada model yang belum memiliki sendi gerak.
 - PANDUAN LENGKAP: lihat `docs/NV_RIG_ENGINE_GUIDE.md`.
+
+8. STANDAR DEKOMPOSISI VFX PROSEDURAL & PROTOKOL CREATOR STORE HIGIENIS:
+- HAKEKAT DASAR VFX: Sejatinya sebuah efek visual di Roblox adalah gabungan dari gambar/decal/tekstur 2D yang diputar (RotSpeed), diskalakan (SizeSequence), diinterpolasi warnanya (ColorSequence), dipancarkan via ParticleEmitter/Beam/Trail, diperkaya pencahayaan (PointLight), dan disinkronkan dengan suara (Sound).
+- LARANGAN KERAS FREE MODEL MENTAH: Dilarang menyuntikkan free model Creator Store mentah untuk efek skill game.
+- KATEGORI CREATOR STORE RESMI:
+  - `Images` (Decals/Textures): Mengambil aset visual 2D murni (wind swirl, energy blade, magic rune, lightning sprite).
+  - `Visual Effects` (Sub-kategori `Particle Effects`): Mengambil preset partikel kompleks.
+  - `Audio`: Mengambil sound effect resmi (charge whine, blast, boom).
+- PROTOKOL PEMBEDAHAN ASET:
+  1. Audit keamanan via `scan_security`.
+  2. Dekomposisi visual (ekstrak ParticleEmitter, Beam, Attachment, TextureId murni).
+  3. Hapus model pembungkus dan script bawaan.
+  4. Pasang partikel bersih ke rig via `batch_create_instances`.
+  5. Simpan ke NV-VFX Database via `scan_vfx`.
+- BLUEPRINT 5-LAYER PROSEDURAL:
+  1. Core Anchor (Part Neon transparan / Attachment pusat).
+  2. Dynamic Emitters (ParticleEmitter inward swirl berkecepatan tinggi).
+  3. Ribbons & Blades (Beam/Trail silang membentuk bilah energi tajam).
+  4. Atmosphere & Glow (PointLight dinamis + cincin shockwave tanah).
+  5. Acoustic Feedback (Sound charge whine + burst explosion).

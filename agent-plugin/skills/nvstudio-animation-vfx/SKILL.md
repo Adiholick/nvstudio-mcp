@@ -108,7 +108,7 @@ Gunakan tool `scan_vfx` pada Project A untuk mengekstrak seluruh hierarki partik
 
 ---
 
-## 4. Terapkan Efek Visual di Proyek Lain (`apply_vfx`)
+## 6. Terapkan Efek Visual di Proyek Lain (`apply_vfx`)
 
 Buka proyek baru (Project B), lalu panggil `apply_vfx` untuk menginstansiasi efek visual yang tersimpan dengan fidelitas 100%.
 
@@ -117,4 +117,101 @@ Buka proyek baru (Project B), lalu panggil `apply_vfx` untuk menginstansiasi efe
 - `target`: Path objek tujuan di Studio (contoh: `"Workspace.Boss.RightHand"`).
 - `scale`: Skala ukuran efek (contoh: `1.5` untuk memperbesar 50%, `0.8` untuk mengecilkan 20%).
 - `enabled`: Boolean opsional untuk menyalakan/mematikan seluruh emitter saat pertama dibuat.
+
+---
+
+## 7. Dekomposisi Partikel Prosedural & Pembedahan Aset Creator Store (Asset Surgery)
+
+DILARANG mengambil free model mentah dari Creator Store untuk efek skill/kemampuan game. Seluruh efek wajib dirakit secara prosedural atau dibedah secara higienis melalui alur berikut:
+
+### A. Blueprint 5-Layer Prosedural Wajib:
+1. **Core Anchor**: Objek bola neon (`Ball`, `Neon`, transparansi $0.2-0.4$) atau `Attachment` pusat gravitasi.
+2. **Rotational Emitters**: `ParticleEmitter` berkecepatan putar tinggi (`RotSpeed = [400, 700]`) dengan akselerasi inward (menyedot ke pusat).
+3. **Ribbons & Blades**: 4 `Beam` atau `ParticleEmitter` silang (*X-Shape*) untuk membentuk bilah energi berputar.
+4. **Atmosphere & Shockwave**: `PointLight` dinamis (Range: 12, Brightness: 3, Color Cyan/Orange) + partikel cincin gelombang kejut (*Ring Wave*).
+5. **Acoustic SFX**: Objek `Sound` (Charge whine frekuensi tinggi + Burst explosion impact).
+
+### B. Pengambilan Aset Creator Store yang Sah & Higienis:
+- **`Images` (Decals/Textures)**: Cari aset visual 2D (seperti *wind swirl*, *energy blade*, *magic ring*, *lightning sprite*). Salin `Texture` ID dan gunakan langsung di properti `Texture` dari `ParticleEmitter` atau `Beam`.
+- **`Visual Effects` (Sub-kategori `Particle Effects`)**: Jika mengimpor preset partikel kompleks:
+  1. Jalankan `scan_security` untuk memastikan 100% bebas script backdoor dan `require(id)`.
+  2. Ekstrak hanya instance visual (`ParticleEmitter`, `Beam`, sequences).
+  3. Hapus model pembungkus asli dan seluruh script bawaan.
+  4. Rakit ulang ke rig karakter via `batch_create_instances`.
+  5. Simpan ke NV-VFX Database via `scan_vfx`.
+
+### C. Contoh Blueprint Perakitan Prosedural (`batch_create_instances`):
+```json
+{
+  "instances": [
+    {
+      "className": "Attachment",
+      "parent": "Workspace.Dummy.RightHand",
+      "name": "RasenAnchor",
+      "properties": {
+        "Position": [0, -1.2, 0]
+      },
+      "children": [
+        {
+          "className": "Part",
+          "name": "CoreOrb",
+          "properties": {
+            "Shape": "Ball",
+            "Size": [1.2, 1.2, 1.2],
+            "Material": "Neon",
+            "Color": [0, 0.85, 1],
+            "Transparency": 0.25,
+            "CanCollide": false,
+            "Anchored": false
+          }
+        },
+        {
+          "className": "ParticleEmitter",
+          "name": "InwardSwirl",
+          "properties": {
+            "Rate": 60,
+            "Lifetime": [0.3, 0.5],
+            "Speed": [1, 3],
+            "RotSpeed": [400, 800],
+            "Acceleration": [0, 0, 0],
+            "Color": [
+              [0, [0.4, 0.9, 1]],
+              [1, [0.9, 1, 1]]
+            ],
+            "Size": [
+              [0, 1.8, 0],
+              [1, 0.2, 0]
+            ],
+            "Transparency": [
+              [0, 0.8, 0],
+              [0.5, 0.1, 0],
+              [1, 1, 0]
+            ]
+          }
+        },
+        {
+          "className": "PointLight",
+          "name": "AmbientGlow",
+          "properties": {
+            "Color": [0, 0.8, 1],
+            "Range": 14,
+            "Brightness": 3.5,
+            "Shadows": true
+          }
+        },
+        {
+          "className": "Sound",
+          "name": "ChargeSFX",
+          "properties": {
+            "Volume": 0.85,
+            "Looped": true,
+            "PlaybackSpeed": 1.15
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
 

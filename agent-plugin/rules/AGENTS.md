@@ -114,5 +114,30 @@ Saat memeriksa, membuat, atau memodifikasi sendi karakter (`Motor6D` / `Weld`):
 - **PENGELASAN ASSEMBLY SENJATA/PROP**: Gunakan `weld_assembly` untuk menyatukan seluruh komponen prop/senjata secara kaku ke part pegangan sebelum ditautkan ke karakter.
 - **DOKUMENTASI REFERENSI LENGKAP**: lihat `docs/NV_RIG_ENGINE_GUIDE.md`.
 
+## 11. Standar Dekomposisi VFX Prosedural & Protokol Creator Store Higienis (Anti-Shortcut Ground Truth)
+Saat diminta merancang efek visual, sihir, aura, proyektil, atau skill anime/game (seperti Rasengan, Fireball, Katana Slash, Aura Super, dll):
+- **HAKEKAT DASAR VFX**: Sejatinya sebuah efek visual di Roblox adalah gabungan dari gambar/decal/tekstur 2D yang diputar (`RotSpeed`), diskalakan (`SizeSequence`), diinterpolasi warnanya (`ColorSequence`), dipancarkan via `ParticleEmitter` / `Beam` / `Trail`, diperkaya pencahayaan dinamis (`PointLight`), dan disinkronkan dengan efek suara (`Sound`).
+- **LARANGAN KERAS PENGGUNAAN MENTAH (ANTI-RAW MODEL SHORTCUT)**:
+  - Dilarang keras mengandalkan free model Creator Store yang disuntikkan secara mentah ke karakter atau workspace dengan script bawaannya yang rentan backdoor, malware, laggy loop, dan ukuran tidak proporsional.
+- **KATEGORI CREATOR STORE RESMI YANG DIIZINKAN**:
+  - `Images` (Decals/Textures): Mengambil aset visual 2D murni (misal: *wind swirl*, *energy blade*, *magic ring*, *lightning sprite*, *flipbook sheet*) tanpa risiko kode eksekusi.
+  - `Visual Effects` (Sub-kategori `Particle Effects`): Mengambil preset partikel kompleks.
+  - `Audio`: Mengambil efek suara resmi (*charge whine*, *whoosh*, *blast*, *boom*).
+- **PROTOKOL PEMBEDAHAN ASET (ASSET SURGERY PROTOCOL)**:
+  Jika mengimpor aset dari kategori `Visual Effects` atau Model:
+  1. **Audit Keamanan Mutlak**: Wajib panggil `scan_security` untuk memusnahkan seluruh script, backdoor, dan `require(id)`.
+  2. **Dekomposisi Visual**: Ekstrak HANYA objek visual murni (`ParticleEmitter`, `Beam`, `Attachment`, `TextureId`, sequences).
+  3. **Pemusnahan Container**: Hapus model pembungkus asli beserta script-scriptnya.
+  4. **Rekonstruksi Higienis**: Pasang partikel bersih ke anchor/rig karakter menggunakan `batch_create_instances` / `set_properties`.
+  5. **Simpan ke Database**: Simpan konfigurasi ke NV-VFX Database via `scan_vfx` agar menjadi aset mandiri portabel proyek.
+- **BLUEPRINT 5-LAYER PROSEDURAL WAJIB**:
+  Setiap efek skill berkekuatan tinggi wajib dibangun dengan dekomposisi 5 layer:
+  1. *Core Anchor*: Part/Mesh Ball Neon transparan + Attachment pusat rotasi.
+  2. *Dynamic Emitters*: `ParticleEmitter` akselerasi inward (hisapan angin/energi) dengan `RotSpeed` tinggi.
+  3. *Ribbons & Blades*: `Beam` atau `Trail` silang (*X-Shape*) membentuk bilah tajam memotong.
+  4. *Atmosphere & Glow*: `PointLight` dinamis (pantulan ke tubuh karakter) + cincin shockwave tanah.
+  5. *Acoustic Feedback*: Objek `Sound` (Charge high-pitch whine + Burst impact).
+
+
 
 
