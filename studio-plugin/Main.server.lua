@@ -162,7 +162,7 @@ local function addSystemLog(msg, msgType)
 	local fullMsg = prefix .. msg
 	table.insert(ctx.recentLogs, fullMsg)
 	if #ctx.recentLogs > MAX_LOGS then table.remove(ctx.recentLogs, 1) end
-	if ui then ui:addLog(fullMsg, color) end
+	if ui then pcall(function() ui:addLog(fullMsg, color) end) end
 end
 LogService.MessageOut:Connect(addSystemLog)
 
@@ -237,8 +237,14 @@ local function processTask(taskData)
 	result.id = taskData.id
 
 	if ui then
-		local color = result.status == "success" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
-		ui:addLog("[AI Result] " .. tostring(result.result or result.error), color)
+		pcall(function()
+			local color = result.status == "success" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+			local summary = tostring(result.result or result.error or "")
+			if #summary > 500 then
+				summary = string.sub(summary, 1, 500) .. " ... [Output besar]"
+			end
+			ui:addLog("[AI Result] " .. summary, color)
+		end)
 	end
 
 	return result

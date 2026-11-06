@@ -358,8 +358,14 @@ end
 -- Menambahkan baris log baru ke terminal GUI
 -- ═══════════════════════════════════════════
 function UIManager:addLog(text, color)
+    local rawText = tostring(text or "")
+    local MAX_LOG_LENGTH = 1000
+    if #rawText > MAX_LOG_LENGTH then
+        rawText = string.sub(rawText, 1, MAX_LOG_LENGTH) .. " ... [Terpotong " .. tostring(#rawText - MAX_LOG_LENGTH) .. " karakter]"
+    end
+
     local timestamp = os.date("%H:%M:%S")
-    local displayText = "[" .. timestamp .. "] " .. text
+    local displayText = "[" .. timestamp .. "] " .. rawText
 
     local logLabel = Instance.new("TextLabel")
     logLabel.Text = displayText
