@@ -1156,7 +1156,7 @@
         </nav>
 
         <div class="sidebar-footer">
-            <span class="badge-v2" id="pkg-version">v2.4.2</span>
+            <span class="badge-v2" id="pkg-version">v2.4.3</span>
             <span style="font-size:10px; opacity:0.6;">Model Context Protocol</span>
         </div>
     </aside>
@@ -1484,7 +1484,7 @@
             <div class="page" id="page-about">
                 <div class="about-section">
                     <div class="about-hero">
-                        <h2>nvstudio-mcp <span class="v2-chip" id="about-version-chip">v2.4.2</span></h2>
+                        <h2>nvstudio-mcp <span class="v2-chip" id="about-version-chip">v2.4.3</span></h2>
                         <p>Jembatan pintar berbasis <strong>Model Context Protocol (MCP)</strong> yang menghubungkan AI Agent (Antigravity IDE, Cursor, Claude Desktop, Windsurf) secara langsung ke dalam <strong>Roblox Studio</strong>.</p>
                         <div class="about-links">
                             <a class="about-link" href="https://github.com/Adiholick/nvstudio-mcp" target="_blank">
@@ -1499,12 +1499,14 @@
                     </div>
 
                     <div class="about-card">
-                        <h3>🚀 Fitur Baru v2.4.2</h3>
+                        <h3>🚀 Fitur Baru v2.4.3</h3>
                         <ul>
+                            <li><strong>✨ VFX Instance Structure Standard:</strong> Penegakan aturan mutlak pembuatan VFX wajib berupa Roblox Instance konkret di hierarchy DataModel (misal <code>ReplicatedStorage.VFX</code>) menggunakan semantic tools MCP, bukan script Luau hardcoded <code>Instance.new</code>. Script Luau hanya berfungsi sebagai runtime controller/trigger.</li>
+                            <li><strong>🦴 Human-Like Motion Kinematics & Anti-Dislocation:</strong> Penegakan batas anatomis sendi anti-patah tulang (siku/lutut 1-DOF hinge dengan larangan mutlak sudut negatif &lt; 0° serta larangan roll/yaw).</li>
+                            <li><strong>🎯 Joint Isolation & Foot-Planting:</strong> Hanya menggerakkan primary movers sendi yang relevan secara biomekanik, mencegah flailing spastik acak, dan menjaga tumpuan kaki stabil di tanah.</li>
                             <li><strong>🦴 NV-Rig Engine:</strong> Rigging headless presisi $O(1)$ untuk R6, R15, dan Custom Rig. Menyediakan inspeksi sendi (<code>inspect_rig</code>), pemindahan poros C0/C1 simultan anti-dislokasi (<code>edit_rig_joint</code>), auto-rigging instan (<code>auto_rig</code>), dan assembly welding senjata/prop (<code>weld_assembly</code>).</li>
-                            <li><strong>🎬 NV-Animation Engine:</strong> Pembuatan animasi karakter halus alami (Walk, Slash, Punch, Idle, IK) langsung menjadi <code>KeyframeSequence</code> resmi dengan interpolasi Bezier (Cubic/Quad) dan penegakan batas anatomis aman tanpa glitch.</li>
-                            <li><strong>✨ NV-VFX Subsystem & Database:</strong> Serialisasi efek visual (ParticleEmitter, Beam, Trail, PointLight) lintas-proyek dengan tool <code>scan_vfx</code> dan rekonstruksi instan via <code>apply_vfx</code>, dilengkapi web category browser interaktif.</li>
-                            <li><strong>⚡ Batch Instance Builder & Security:</strong> Membangun hierarki massal, sanitasi keamanan backdoor aset, dan live Creator Docs lookup.</li>
+                            <li><strong>🎬 NV-Animation Engine:</strong> Pembuatan animasi karakter halus alami (Walk, Slash, Punch, Idle, IK) langsung menjadi <code>KeyframeSequence</code> resmi dengan interpolasi Bezier (Cubic/Quad).</li>
+                            <li><strong>✨ NV-VFX Subsystem & Database:</strong> Serialisasi efek visual (ParticleEmitter, Beam, Trail, PointLight) lintas-proyek dengan tool <code>scan_vfx</code> dan rekonstruksi instan via <code>apply_vfx</code>.</li>
                         </ul>
                     </div>
 

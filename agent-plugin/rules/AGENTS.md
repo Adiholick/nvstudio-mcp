@@ -84,17 +84,29 @@ Saat merancang komponen interaktif khusus, patuhi pola NV-Series:
   - **Item Seleksi:** Gunakan `UIStroke` bernama `SelectStroke`: Active = `Color3.fromRGB(0, 255, 255)` (Cyan), Inactive = `Color3.fromRGB(60, 60, 65)`.
   - **Tombol Non-Aktif / Limit:** Set `AutoButtonColor = false` dan teks status (contoh: `"WAIT (Xs)"`, `"OUT OF QUOTA"`).
 
-## 8. NV-Animation Engine & Kinematics (Anti-Hallucination Ground Truth)
-Saat diminta menganimasikan karakter di Roblox Studio, Anda WAJIB mematuhi ground truth berikut:
+## 8. NV-Animation Engine & Kinematics (Human-Like Motion & Anti-Dislocation Rules)
+Saat diminta menganimasikan karakter di Roblox Studio, Anda WAJIB mematuhi kaidah kinematika gerak manusiawi (*Human-Like Kinematics*):
 - **DILARANG MENGGUNAKAN LOOP RUNTIME**: Animasi karakter tidak boleh dibuat menggunakan script loop `while true do task.wait() ...`. Animasi wajib dibuat sebagai instance resmi `KeyframeSequence` di dalam `AnimSaves` rig (gunakan tool semantic `animate_character` atau `solve_limb_ik`).
 - **SENSITIVITAS SPASI NAMA MOTOR6D**:
   - Karakter R15: Menggunakan CamelCase TANPA SPASI (`LeftShoulder`, `LeftElbow`, `LeftWrist`, `LeftHip`, `LeftKnee`, `LeftAnkle`, `Waist`, `Neck`, `Root`).
   - Karakter R6: WAJIB MENGGUNAKAN SPASI (`Left Shoulder`, `Right Shoulder`, `Left Hip`, `Right Hip`, `Neck`, `RootJoint`).
-- **BATAS SUDUT ANATOMIS AMAN**:
-  - Siku (`LeftElbow`, `RightElbow`) dan Lutut (`LeftKnee`, `RightKnee`) adalah sendi engsel (hinge joint). Dilarang memutar sumbu Roll/Yaw. Sudut tekukan Pitch hanya $0^\circ \dots 145^\circ$ untuk siku dan $0^\circ \dots 135^\circ$ untuk lutut. Dilarang menekuk siku atau lutut ke arah berlawanan (dislokasi).
-  - Torso/Waist pitch dibatasi $-25^\circ \dots 35^\circ$, twist yaw $\pm 45^\circ$.
+- **BATAS SUDUT ANATOMIS & ANTI-PATAH TULANG (Anti-Bone-Breaking / Anti-Dislocation)**:
+  - **Siku (`LeftElbow`, `RightElbow`)**: Hinge joint (1-DOF). HANYA boleh menekuk pada sumbu Pitch ke depan/dalam ($0^\circ \dots 145^\circ$). **MUTLAK DILARANG SUDUT NEGATIF** ($< 0^\circ$) yang menyebabkan hiperekstensi siku / patah ke belakang. **MUTLAK DILARANG ROTASI ROLL ATAU YAW** (siku manusia tidak bisa memelintir secara independen).
+  - **Lutut (`LeftKnee`, `RightKnee`)**: Hinge joint (1-DOF). HANYA boleh menekuk pada sumbu Pitch ke belakang ($0^\circ \dots 135^\circ$). **MUTLAK DILARANG SUDUT NEGATIF** ($< 0^\circ$) yang menyebabkan lutut patah ke depan (dislokasi tempurung). **MUTLAK DILARANG ROTASI ROLL ATAU YAW**.
+  - **Bahu (`LeftShoulder`, `RightShoulder`)**: Ball & socket joint (3-DOF) terbatas: elevasi $-60^\circ \dots 160^\circ$, rotasi internal/eksternal $\pm 70^\circ$. DILARANG memutar lengan $> 180^\circ$ mendadak yang memelintir sendi secara tak wajar atau menembus mesh torso/kepala (*clipping*).
+  - **Pangkal Paha (`LeftHip`, `RightHip`)**: Fleksi/ekstensi $-90^\circ \dots 45^\circ$, abduksi $-20^\circ \dots 45^\circ$. DILARANG memutar paha ke arah dalam atau terbalik yang membuat kaki menyilang patah.
+  - **Leher (`Neck`)**: Pitch $-35^\circ \dots 45^\circ$, twist yaw maksimum $\pm 65^\circ$. DILARANG memutar kepala $> 70^\circ$ yaw (seperti burung hantu/kesurupan) atau tilt leher ekstrem.
+  - **Pinggang / Torso (`Waist`)**: Pitch $-25^\circ \dots 35^\circ$, twist yaw $\pm 35^\circ$, roll $\pm 15^\circ$. DILARANG memelintir torso secara ekstrem yang mematahkan tulang belakang.
+- **ISOLASI SENDI & EFISIENSI GERAK (HANYA GERAKKAN SENDI YANG RELEVAN)**:
+  - **Prinsip Intentional Movement**: Setiap aksi memiliki *Primary Movers* (anggota tubuh utama yang melakukan aksi). HANYA gerakkan sendi-sendi yang relevan secara biomekanik!
+  - **DILARANG Gerakan Acak / Spastik (*Anti-Spastic Flailing*)**: DILARANG menggerakkan atau memutar sendi tubuh tanpa tujuan kinematis yang jelas.
+    - *Contoh Pukulan (Punch)*: Fokus pada lengan pemukul (`RightShoulder`, `RightElbow`, `RightWrist`) dengan rotasi pinggang/torso ringan ($10^\circ \dots 15^\circ$) untuk transfer momentum. Lengan lainnya cukup menjaga pose bersiap (*guard pose*) tanpa mengejang, dan kedua kaki tetap menapak stabil.
+    - *Contoh Tebasan (Slash)*: Fokus pada ayunan lengan pembawa senjata dan bahu. Jangan memelintir pergelangan kaki atau menekuk lutut tumpuan secara serampangan.
+- **KESTABILAN PIJAKAN & TITIK BERAT (*Foot-Planting & Grounding*)**:
+  - `HumanoidRootPart` / `Root`: Bobbing vertikal wajar ($\pm 0.1 \dots 0.2$ stud). Dilarang membuat root melayang drastis naik-turun yang membuat karakter terlihat melayang tak berpijak.
+  - Kaki Penopang (*Plant Foot*): Kaki yang menjadi tumpuan di lantai TIDAK BOLEH bergeser (*sliding*), melayang (*floating*), atau menembus tanah (*ground clipping*).
 - **PRINSIP GERAKAN HALUS (Disney 12 Principles)**:
-  - Setiap gerakan wajib memiliki fase ancang-ancang (*Anticipation*), interpolasi pelambatan (*QuadInOut* atau *CubicInOut*), dan peredaman akhir (*Follow-Through*).
+  - Setiap gerakan wajib memiliki fase ancang-ancang (*Anticipation*), interpolasi pelambatan kurva (*QuadInOut* atau *CubicInOut*), dan peredaman akhir (*Follow-Through*).
 
 ## 9. NV-VFX Serializer & Cross-Project Database Protocols
 Saat memindai, merekonstruksi, atau menerapkan efek visual antar-proyek:
@@ -114,10 +126,22 @@ Saat memeriksa, membuat, atau memodifikasi sendi karakter (`Motor6D` / `Weld`):
 - **PENGELASAN ASSEMBLY SENJATA/PROP**: Gunakan `weld_assembly` untuk menyatukan seluruh komponen prop/senjata secara kaku ke part pegangan sebelum ditautkan ke karakter.
 - **DOKUMENTASI REFERENSI LENGKAP**: lihat `docs/NV_RIG_ENGINE_GUIDE.md`.
 
-## 11. Standar Dekomposisi VFX Prosedural & Protokol Creator Store Higienis (Anti-Shortcut Ground Truth)
-Saat diminta merancang efek visual, sihir, aura, proyektil, atau skill anime/game (seperti Rasengan, Fireball, Katana Slash, Aura Super, dll):
+## 11. VFX Instance Structure Rule & Standar Dekomposisi Prosedural (Bukan Script Hardcoded)
+Saat diminta merancang efek visual, sihir, aura, proyektil, ledakan, atau skill anime/game (seperti Rasengan, Fireball, Katana Slash, Aura Super, dll):
+- **MUTLAK: VFX WAJIB BERUPA INSTANCE KONKRET ROBLOX (BUKAN SCRIPT HARDCODED)**:
+  - Sama seperti aturan GUI pada Bab 1, seluruh efek visual (`ParticleEmitter`, `Beam`, `Trail`, `Attachment`, `PointLight`, `Highlight`, `Sound`) WAJIB dibuat langsung dalam bentuk **Roblox Instance konkret di hierarchy DataModel** (misalnya di folder template `ReplicatedStorage.VFX.<Kategori>.<NamaEfek>`, `Workspace`, atau Attachment pada rig karakter).
+  - **DILARANG KERAS membuat script Luau hardcoded** yang memuat puluhan/ratusan baris `Instance.new("ParticleEmitter")`, `Instance.new("Attachment")`, tabel konfigurasi properti masif di dalam script runtime, atau loop script yang memunculkan partikel secara prosedural lewat kode runtime.
+  - Gunakan tool MCP (`batch_create_instances`, `create_instance`, `set_properties`, atau `apply_vfx`) untuk membangun hierarki instance konkret langsung di Roblox Studio.
+- **PERAN SCRIPT LUAU HANYA SEBAGAI RUNTIME CONTROLLER / TRIGGER**:
+  - Script Luau (`Script`, `LocalScript`, atau `ModuleScript`) HANYA bertindak sebagai Controller / Listener:
+    1. Men-clone instance template VFX yang sudah ada di `ReplicatedStorage.VFX`.
+    2. Menempatkan clone ke target `Attachment` atau CFrame dunia.
+    3. Memicu emisi partikel via `:Emit(count)` atau menyalakan `Enabled = true` sementara.
+    4. Mengatur durasi hidup dan pembersihan via `game:GetService("Debris"):AddItem(clone, lifetime)`.
+    5. Melakukan tweening sederhana jika diperlukan (misalnya memudarkan transparansi part atau point light).
+  - Script DILARANG merakit struktur partikel dari nol atau mendefinisikan urutan ColorSequence/NumberSequence secara hardcoded di dalam runtime code!
 - **HAKEKAT DASAR VFX**: Sejatinya sebuah efek visual di Roblox adalah gabungan dari gambar/decal/tekstur 2D yang diputar (`RotSpeed`), diskalakan (`SizeSequence`), diinterpolasi warnanya (`ColorSequence`), dipancarkan via `ParticleEmitter` / `Beam` / `Trail`, diperkaya pencahayaan dinamis (`PointLight`), dan disinkronkan dengan efek suara (`Sound`).
-- **LARANGAN KERAS PENGGUNAAN MENTAH (ANTI-RAW MODEL SHORTCUT)**:
+- **LARANGAN KERAS PENGGUNAAN FREE MODEL MENTAH (ANTI-RAW MODEL SHORTCUT)**:
   - Dilarang keras mengandalkan free model Creator Store yang disuntikkan secara mentah ke karakter atau workspace dengan script bawaannya yang rentan backdoor, malware, laggy loop, dan ukuran tidak proporsional.
 - **KATEGORI CREATOR STORE RESMI YANG DIIZINKAN**:
   - `Images` (Decals/Textures): Mengambil aset visual 2D murni (misal: *wind swirl*, *energy blade*, *magic ring*, *lightning sprite*, *flipbook sheet*) tanpa risiko kode eksekusi.

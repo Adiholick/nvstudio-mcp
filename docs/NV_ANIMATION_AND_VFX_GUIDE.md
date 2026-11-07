@@ -30,8 +30,21 @@ Roblox memiliki dua standar rig utama dengan penamaan `Motor6D` yang sangat berb
 | **Pergelangan Kaki Kanan**| `RightAnkle` (Part0: RightLowerLeg, Part1: RightFoot) | *(Virtual via R6Controls)* | Pitch $-40^\circ \dots 30^\circ$ |
 
 > [!CAUTION]
-> **ATURAN MUTLAK SIKU & LUTUT:**
-> Siku dan lutut manusia adalah sendi engsel (*hinge joint*). Jangan pernah memberikan rotasi Roll atau Yaw pada `LeftElbow`, `RightElbow`, `LeftKnee`, atau `RightKnee`. Rotasi hanya boleh terjadi pada sumbu tekukan anatomis.
+> **ATURAN MUTLAK SIKU & LUTUT (ANTI-PATAH TULANG / ANTI-DISLOKASI):**
+> Siku dan lutut manusia adalah sendi engsel (*hinge joint* 1-DOF).
+> - **Siku (`LeftElbow`, `RightElbow`)**: HANYA boleh menekuk pada Pitch ke depan ($0^\circ \dots 145^\circ$). **MUTLAK DILARANG SUDUT NEGATIF** ($< 0^\circ$) yang menyebabkan hiperekstensi siku / patah ke belakang. Jangan pernah memberikan rotasi Roll atau Yaw.
+> - **Lutut (`LeftKnee`, `RightKnee`)**: HANYA boleh menekuk pada Pitch ke belakang ($0^\circ \dots 135^\circ$). **MUTLAK DILARANG SUDUT NEGATIF** ($< 0^\circ$) yang menyebabkan lutut patah ke depan (dislokasi patela). Jangan pernah memberikan rotasi Roll atau Yaw.
+
+### B. Prinsip Efisiensi Sendi & Isolasi Gerakan (Intentional vs Spastic Motion)
+Animasi karakter yang baik meniru prinsip biomekanik manusia:
+1. **Isolasi Sendi (Primary vs Secondary Movers)**:
+   - Gerakkan HANYA sendi-sendi yang relevan secara fungsional dengan aksi yang diminta.
+   - **DILARANG menggerakkan sendi tubuh secara serampangan/acak (*anti-spastic flailing*)**.
+   - *Contoh Pukulan*: Gerakkan lengan pemukul dan sedikit rotasi pinggang ($10^\circ \dots 15^\circ$) untuk transfer daya kinetik. Lengan satunya tetap dalam pose pertahanan (*guard pose*) tanpa mengejang, dan kedua kaki tetap menapak stabil.
+   - *Contoh Tebasan*: Ayunan senjata fokus pada bahu dan lengan; jangan memutar pergelangan kaki atau menggelengkan kepala tanpa tujuan.
+2. **Kestabilan Titik Berat & Pijakan Kaki (*Foot-Planting & Grounding*)**:
+   - Kaki penopang yang menyentuh lantai tidak boleh bergeser (*sliding*), melayang (*floating*), atau amblas ke tanah (*ground clipping*).
+   - `HumanoidRootPart` / `Root`: Bobbing vertikal harus proporsional ($\pm 0.1 \dots 0.2$ stud). Dilarang membuat karakter melayang naik-turun ekstrem yang merusak gravitasi.
 
 ---
 
@@ -180,8 +193,11 @@ sequenceDiagram
 ## 7. Jebakan Halusinasi yang Wajib Dihindari (Anti-Patterns)
 
 1. **DILARANG membuat script Luau loop `while true do part.CFrame = ...`** saat user meminta animasi karakter. Gunakan `animate_character` yang menghasilkan `KeyframeSequence` resmi.
-2. **DILARANG memanggil `solve_limb_ik` dengan koordinat di luar jangkauan rig** tanpa pole vector atau memutar siku ke belakang ($< 0^\circ$).
-3. **DILARANG membuat `ColorSequence` atau `NumberSequence` tanpa keypoint awal ($t=0$) dan akhir ($t=1$)**. Roblox Engine akan melempar error runtime instan jika keypoint $0$ atau $1$ tidak didefinisikan.
-4. **DILARANG menggunakan string part path pada `Beam.Attachment0`**. Beam wajib mengacu pada instance `Attachment`.
-5. **DILARANG menebak nama joint R6 tanpa spasi**. R6 selalu menggunakan spasi: `"Left Arm"`, `"Left Shoulder"`, `"Torso"`, `"RootJoint"`.
+2. **DILARANG membuat animasi dengan sendi patah tulang / dislokasi** (seperti sudut siku atau lutut negatif $< 0^\circ$, memutar Roll/Yaw pada siku/lutut, atau rotasi bahu/paha $> 180^\circ$).
+3. **DILARANG menggerakkan sendi yang tidak perlu secara spastik (*no spastic flailing*)**. Hanya manipulasi sendi yang relevan secara biomekanik dengan aksi utama, dan pertahankan tumpuan kaki (*foot-planting*).
+4. **DILARANG MERANCANG VFX SEBAGAI SCRIPT HARDCODED**. Seluruh efek visual (`ParticleEmitter`, `Beam`, `Attachment`, `PointLight`, `Sound`) WAJIB berupa Instance Roblox konkret di DataModel (misal `ReplicatedStorage.VFX` atau Attachment rig) menggunakan tool MCP (`batch_create_instances`, `create_instance`, `apply_vfx`). Script Luau HANYA boleh bertindak sebagai trigger pemicu (`:Clone()`, `:Emit()`, `Enabled = true`, `Debris:AddItem`).
+5. **DILARANG memanggil `solve_limb_ik` dengan koordinat di luar jangkauan rig** tanpa pole vector atau memutar siku ke belakang ($< 0^\circ$).
+6. **DILARANG membuat `ColorSequence` atau `NumberSequence` tanpa keypoint awal ($t=0$) dan akhir ($t=1$)**. Roblox Engine akan melempar error runtime instan jika keypoint $0$ atau $1$ tidak didefinisikan.
+7. **DILARANG menggunakan string part path pada `Beam.Attachment0`**. Beam wajib mengacu pada instance `Attachment`.
+8. **DILARANG menebak nama joint R6 tanpa spasi**. R6 selalu menggunakan spasi: `"Left Arm"`, `"Left Shoulder"`, `"Torso"`, `"RootJoint"`.
 

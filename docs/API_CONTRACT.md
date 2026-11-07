@@ -1,4 +1,4 @@
-# API Contract (nvstudio-mcp v2.4.2)
+# API Contract (nvstudio-mcp v2.4.3)
 
 Dokumen ini adalah spesifikasi baku komunikasi antara Local Bridge Server (Node.js) dan Plugin Roblox Studio (Luau).
 

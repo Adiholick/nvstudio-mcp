@@ -45,6 +45,18 @@ Gunakan tool `animate_character` untuk menghasilkan animasi yang halus (*smooth*
 
 Hasilnya akan secara otomatis terkompilasi menjadi `KeyframeSequence` resmi di dalam folder `AnimSaves` karakter pada Studio.
 
+### Kaidah Kinematika Manusiawi & Pencegahan Dislokasi (Human-Like Rules):
+Saat menyusun pose kunci (`custom`) atau memilih parameter aksi, Anda WAJIB mematuhi kaidah biomekanik alami:
+1. **Anti-Patah Tulang & Rentang Sudut Aman (ROM Limits)**:
+   - **Siku (`LeftElbow`, `RightElbow`)**: Hinge joint (1-DOF). Hanya boleh menekuk pada sumbu Pitch ke depan/dalam ($0^\circ \dots 145^\circ$). **MUTLAK DILARANG SUDUT NEGATIF** ($< 0^\circ$) yang menyebabkan hiperekstensi siku / patah ke belakang. **DILARANG ROTASI ROLL ATAU YAW**.
+   - **Lutut (`LeftKnee`, `RightKnee`)**: Hinge joint (1-DOF). Hanya boleh menekuk pada sumbu Pitch ke belakang ($0^\circ \dots 135^\circ$). **MUTLAK DILARANG SUDUT NEGATIF** ($< 0^\circ$) yang menyebabkan lutut patah ke depan. **DILARANG ROTASI ROLL ATAU YAW**.
+   - **Bahu & Paha**: Batasi gerakan dalam rentang wajar manusia. Dilarang memutar lengan/kaki $> 180^\circ$ mendadak yang memelintir sendi atau menembus mesh torso/kepala (*clipping*).
+   - **Leher & Kepala**: Pitch $-35^\circ \dots 45^\circ$, twist yaw $\le \pm 65^\circ$. DILARANG memutar leher melebihi $70^\circ$ yaw (seperti burung hantu/kesurupan).
+2. **Isolasi Sendi & Efisiensi Gerak (Hanya Gerakkan Sendi yang Relevan)**:
+   - **Intentional Movement**: Gerakkan HANYA sendi-sendi yang menjadi *Primary Movers* dari aksi tersebut.
+   - **DILARANG Gerakan Acak / Spastik (*Anti-Spastic Flailing*)**: Jangan menggerakkan sendi tubuh yang tidak relevan secara serampangan. Misalnya saat animasi memukul dengan tangan kanan, sendi tangan kiri cukup berada pada pose bersiap (*guard pose*) tanpa mengejang, dan kedua kaki tetap menapak stabil.
+   - **Foot-Planting & Kestabilan Titik Berat**: Kaki yang bertindak sebagai tumpuan lantai tidak boleh meluncur (*sliding*), melayang (*floating*), atau amblas ke tanah. Root bobbing dijaga wajar ($\pm 0.1 \dots 0.2$ stud).
+
 ---
 
 ## 2. Kalkulasi Kinematika Lengan / Kaki (`solve_limb_ik`)
@@ -121,6 +133,11 @@ Buka proyek baru (Project B), lalu panggil `apply_vfx` untuk menginstansiasi efe
 ---
 
 ## 7. Dekomposisi Partikel Prosedural & Pembedahan Aset Creator Store (Asset Surgery)
+
+### Aturan Wajib: VFX Berupa Instance Konkret (Bukan Script Hardcoded)
+- **MUTLAK:** Seluruh efek visual (`ParticleEmitter`, `Beam`, `Trail`, `Attachment`, `PointLight`, `Sound`) WAJIB dibuat sebagai **Roblox Instance konkret di dalam DataModel** (misalnya di dalam folder template `ReplicatedStorage.VFX.<Kategori>.<NamaEfek>`, `Workspace`, atau Attachment rig karakter), menggunakan tool MCP (`batch_create_instances`, `create_instance`, `set_properties`, atau `apply_vfx`).
+- **DILARANG KERAS** membuat script Luau hardcoded yang memuat puluhan/ratusan baris `Instance.new("ParticleEmitter")`, tabel konfigurasi properti masif di dalam script runtime, atau loop script generator partikel lewat kode.
+- **Peran Script Luau Terbatas pada Runtime Controller / Trigger**: Script Luau (Server/Client) HANYA bertindak untuk meng-clone template dari `ReplicatedStorage.VFX`, menempatkannya ke target/Attachment, memanggil `:Emit(count)` atau mengaktifkan `Enabled = true/false` sementara, dan membersihkan via `Debris:AddItem`. Script dilarang merakit struktur partikel dari nol!
 
 DILARANG mengambil free model mentah dari Creator Store untuk efek skill/kemampuan game. Seluruh efek wajib dirakit secara prosedural atau dibedah secara higienis melalui alur berikut:
 
